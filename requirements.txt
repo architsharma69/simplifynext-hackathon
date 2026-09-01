@@ -2,3 +2,6 @@
 crewai
 pydantic
 pytest
+fastapi
+uvicorn[standard]
+httpx
