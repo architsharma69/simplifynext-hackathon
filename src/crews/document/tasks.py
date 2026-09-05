@@ -1,86 +1,95 @@
 """
-crews/tasks.py
-Task templates for each agent. These use CrewAI's {placeholder} interpolation
-so the Flow can pass in the structured JSON payloads collected during the
-conversation. Kept as functions (not module-level Task objects) because each
-Crew kickoff needs fresh Task instances bound to that run's inputs.
+crews/document/tasks.py
+Prompt-text builders for the Document Team Lead and each document specialist.
+These return plain strings for Agent.kickoff(...) calls — no crewai.Task or
+Crew objects — because dispatch and sequencing are handled directly by
+OrchestratorFlow (flows/orchestrator_flow.py), and each specialist is a
+standalone Agent (crews/document/agents.py) invoked on its own, not
+coordinated through a Crew.
 """
 from __future__ import annotations
 
-from crewai import Task
-
-from crews.document.agents import (
-    financial_synthesizer_agent,
-    grant_strategist_agent,
-    statutory_compliance_agent,
-)
+import json
 
 
-def make_statutory_tasks(document_types: list[str]) -> list[Task]:
-    validate_task = Task(
-        description=(
-            "Validate the company profile JSON at {company_profile_json} for "
-            "ACRA-filing blockers (missing resident director, no shareholders, "
-            "invalid paid-up capital, missing SSIC code). If issues are found, "
-            "list them clearly instead of proceeding to render documents."
-        ),
-        expected_output="Either 'OK' or a bulleted list of specific issues to resolve with the user.",
-        agent=statutory_compliance_agent,
-    )
-    render_task = Task(
-        description=(
-            "Only if the validation task returned OK: render the following "
-            "ACRA documents from the same company profile JSON: "
-            f"{', '.join(document_types)}. Call the render tool once per "
-            "document type. Return the RenderedDocument JSON for each."
-        ),
-        expected_output="A JSON array of RenderedDocument objects, one per requested document type.",
-        agent=statutory_compliance_agent,
-        context=[validate_task],
-    )
-    return [validate_task, render_task]
-
-
-def make_financial_task() -> Task:
-    return Task(
-        description=(
-            "Using the assumptions provided in {financial_assumptions_json} "
-            "(starting_monthly_revenue_sgd, monthly_revenue_growth_pct, "
-            "cogs_pct_of_revenue, fixed_monthly_opex_sgd, starting_cash_sgd), "
-            "generate the 3-year forecast via the forecast tool, then produce "
-            "a one-paragraph plain-English summary via the summary tool. If "
-            "any assumption looks implausible (e.g. >50% monthly growth "
-            "sustained for 36 months), say so explicitly before proceeding."
-        ),
-        expected_output=(
-            "The full FinancialForecast JSON followed by a short plain-English "
-            "summary paragraph."
-        ),
-        agent=financial_synthesizer_agent,
+def build_document_routing_prompt(sub_query: str, business_context: dict) -> str:
+    return (
+        "A business owner's question, already rephrased for the document team, is:\n"
+        f'"{sub_query}"\n\n'
+        f"Everything known so far about this business (JSON): {json.dumps(business_context)}\n\n"
+        "Decide which ONE document specialist should handle this:\n"
+        '- "statutory": Singapore ACRA BizFile+ incorporation paperwork (Model '
+        "Constitution, Form 45, Form 45B, First Board Resolution, RORC register).\n"
+        '- "financial": a 3-year cash flow / P&L forecast, burn rate, and '
+        "break-even estimate built from a small set of business assumptions.\n"
+        '- "grant": a Startup SG Founder or EDG grant package, which needs a '
+        "financial forecast and headcount plan to already exist.\n\n"
+        'If the query and business context together give you enough to proceed, set '
+        'route_type to "dispatch" and pick a specialist. In extracted_fields_json, '
+        "re-emit the COMPLETE up-to-date value (not just what's new this turn) of "
+        "any of these keys you're confident about, merging what's already known "
+        "with anything new in this message: company_profile (matching the "
+        "CompanyProfile schema: proposed_company_name, registered_address, "
+        "principal_activity_ssic_code, directors, shareholders, "
+        "company_secretary_name, paid_up_capital_sgd), financial_assumptions "
+        "(starting_monthly_revenue_sgd, monthly_revenue_growth_pct, "
+        "cogs_pct_of_revenue, fixed_monthly_opex_sgd, starting_cash_sgd), "
+        "headcount_plan (a dict with a 'lines' list of role_title, department, "
+        "count, monthly_salary_sgd, start_month_index), narrative_sections (a "
+        "dict of section name -> text for the grant scheme), "
+        "requested_amount_sgd, and grant_scheme (\"startup_sg_founder\" or "
+        '"enterprise_development_grant"). Leave extracted_fields_json as "{}" '
+        "if nothing new or confirmed is available.\n\n"
+        "If you genuinely cannot tell which specialist applies even with this "
+        'context, set route_type to "clarify" and ask exactly one specific '
+        "question in clarifying_question."
     )
 
 
-def make_grant_tasks(scheme: str) -> list[Task]:
-    validate_task = Task(
-        description=(
-            f"Validate that {{narrative_sections_json}} contains all required "
-            f"sections for the '{scheme}' scheme and that none are too thin. "
-            "If sections are missing or thin, list exactly what's needed from "
-            "the user instead of proceeding."
-        ),
-        expected_output="Either 'OK' or a specific list of missing/thin sections.",
-        agent=grant_strategist_agent,
+def build_statutory_render_prompt(document_types: list[str], company_profile_json: str) -> str:
+    return (
+        "The following CompanyProfile JSON has already been validated as "
+        f"complete and ACRA-filing-ready:\n{company_profile_json}\n\n"
+        "Render the following ACRA documents by calling the render tool once "
+        f"per document type: {', '.join(document_types)}.\n"
+        "Return the RenderedDocument JSON for each, followed by one "
+        "plain-English sentence per document summarizing what was produced."
     )
-    compile_task = Task(
-        description=(
-            "Only if narrative validation returned OK: compile the final grant "
-            f"package for scheme '{scheme}' using {{company_profile_json}}, "
-            "{financial_forecast_json} (already generated by the Financial "
-            "Synthesizer — do not recompute), {headcount_plan_json}, "
-            "{narrative_sections_json}, and {requested_amount_sgd}."
-        ),
-        expected_output="The full GrantPackage JSON including generated_document_path.",
-        agent=grant_strategist_agent,
-        context=[validate_task],
+
+
+def build_financial_prompt(financial_assumptions_json: str) -> str:
+    return (
+        "Using the assumptions below (starting_monthly_revenue_sgd, "
+        "monthly_revenue_growth_pct, cogs_pct_of_revenue, "
+        "fixed_monthly_opex_sgd, starting_cash_sgd), generate the 3-year "
+        "forecast via the forecast tool, then produce a one-paragraph "
+        "plain-English summary via the summary tool. If any assumption looks "
+        "implausible (e.g. >50% monthly growth sustained for 36 months), say "
+        "so explicitly before proceeding.\n\n"
+        f"Assumptions JSON: {financial_assumptions_json}\n\n"
+        "Return the full FinancialForecast JSON followed by the plain-English "
+        "summary."
     )
-    return [validate_task, compile_task]
+
+
+def build_grant_prompt(
+    scheme: str,
+    company_profile_json: str,
+    financial_forecast_json: str,
+    headcount_plan_json: str,
+    narrative_sections_json: str,
+    requested_amount_sgd: float,
+) -> str:
+    return (
+        f"Compile the final grant package for scheme '{scheme}' by calling "
+        "the compile tool with the data below. The narrative sections have "
+        "already been validated as complete for this scheme; the financial "
+        "forecast was already generated by the Financial Synthesizer — do "
+        "not recompute it.\n\n"
+        f"company_profile_json: {company_profile_json}\n"
+        f"financial_forecast_json: {financial_forecast_json}\n"
+        f"headcount_plan_json: {headcount_plan_json}\n"
+        f"narrative_sections_json: {narrative_sections_json}\n"
+        f"requested_amount_sgd: {requested_amount_sgd}\n\n"
+        "Return the full GrantPackage JSON including generated_document_path."
+    )

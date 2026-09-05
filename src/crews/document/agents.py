@@ -79,3 +79,26 @@ grant_strategist_agent = Agent(
     verbose=True,
     allow_delegation=False,
 )
+
+document_team_lead_agent = Agent(
+    role="Document Team Lead",
+    goal=(
+        "Read one rephrased request from the business's Orchestrator plus "
+        "everything already known about the business, then decide which ONE "
+        "document specialist should handle it (Statutory Compliance, Internal "
+        "Financial Synthesizer, or Grant & Capital Strategist) and pull out any "
+        "structured facts the business owner has already given. Never dispatch "
+        "work to a specialist yourself and never invent missing facts — that's "
+        "OrchestratorFlow's job once you've made the call."
+    ),
+    backstory=(
+        "A calm, organized team lead for a three-person document specialist "
+        "team. Has seen enough incomplete requests to know that guessing at "
+        "missing company or financial details causes far more rework than "
+        "asking one precise clarifying question up front."
+    ),
+    tools=[],
+    llm=llm,
+    verbose=True,
+    allow_delegation=False,
+)

@@ -1,19 +1,17 @@
 """
-models.py
-Typed data contracts for HERMES. These are the objects that move between
-Crews inside the Flow, and between the Flow and the FastAPI layer. Agents
-should populate these via structured tool outputs (Pydantic-validated),
+crews/document/schemas.py
+Typed data contracts for the document crew (HERMES). These are the objects
+that move between the document specialist agents and OrchestratorFlow.
+Agents should populate these via structured tool outputs (Pydantic-validated),
 never via freeform prose handed to the next agent.
 
-The Flow-level session state lives in ``flows/state.py`` (HermesState),
-mirroring the top-level BRO repo where each Flow's state object lives next
-to its orchestrator.
+The Flow-level session state lives in ``flows/state.py`` (OrchestratorState).
 """
 from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -175,3 +173,27 @@ class EscalationRequest(BaseModel):
     decided_at: Optional[datetime] = None
     reviewer_id: Optional[str] = None
     reviewer_comment: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Document Team Lead routing (OrchestratorFlow -> document specialists)
+# ---------------------------------------------------------------------------
+
+
+class DocumentRoutingDecision(BaseModel):
+    """The Document Team Lead's decision for one turn of document work.
+
+    No default values, mirroring crews/orchestrator/schemas.py's
+    RoutingDecision: every field must be filled in (using []/null for
+    whichever don't apply), and open-ended data is passed as a JSON string
+    rather than a freeform dict, matching every other Flow<->agent boundary
+    in this crew (e.g. render_acra_document's company_profile_json).
+    """
+
+    route_type: Literal["dispatch", "clarify"]
+    specialist: Literal["statutory", "financial", "grant"] | None
+    document_types: list[str]
+    grant_scheme: str | None
+    requested_amount_sgd: float | None
+    extracted_fields_json: str
+    clarifying_question: str | None
