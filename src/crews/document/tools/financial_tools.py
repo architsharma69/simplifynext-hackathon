@@ -23,7 +23,7 @@ from Config.config import SRC_DIR  # noqa: E402
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from models import FinancialForecast, MonthlyFinancials  # noqa: E402
+from crews.document.schemas import FinancialForecast, MonthlyFinancials  # noqa: E402
 
 
 def _build_forecast(

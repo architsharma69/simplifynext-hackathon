@@ -27,7 +27,7 @@ from Config.config import DOCUMENT_OUTPUT_DIR, SRC_DIR  # noqa: E402
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from models import (  # noqa: E402
+from crews.document.schemas import (  # noqa: E402
     CompanyProfile,
     DocumentType,
     FinancialForecast,

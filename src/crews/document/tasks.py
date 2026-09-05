@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from crewai import Task
 
-from crews.agents import (
+from crews.document.agents import (
     financial_synthesizer_agent,
     grant_strategist_agent,
     statutory_compliance_agent,
