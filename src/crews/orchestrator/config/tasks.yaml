@@ -1,0 +1,39 @@
+routing_task:
+  description: >
+    A business owner asked: "{user_input}"
+
+
+    Known business context so far: {business_context}
+
+
+    Decide how to handle this. Choose exactly one route_type:
+
+    - "delegate": one or more of hr, finance, document can help. For each one you
+      pick, write a clear, standalone, rephrased version of the question for that
+      team under rephrased_queries — rephrase it so it's unambiguous even without
+      the owner's original wording.
+    - "direct": nothing any specialist team handles applies (e.g. greetings, small
+      talk, meta questions about this assistant). Answer the owner yourself in
+      direct_answer.
+    - "clarify": you genuinely can't tell what's being asked even to route it. Ask
+      one clarifying question in clarifying_question.
+  expected_output: >
+    A routing decision with route_type set to exactly one of delegate/direct/clarify,
+    and only the fields relevant to that route_type filled in.
+
+synthesis_task:
+  description: >
+    The business owner originally asked: "{user_input}"
+
+
+    Each specialist team responded:
+
+    {specialist_outputs}
+
+
+    Combine these into a single, clear, well-organized response for the business
+    owner. If any specialists disagree or conflict, call that out plainly rather
+    than picking a side silently.
+  expected_output: >
+    One coherent response combining all the specialist outputs above, written
+    directly to the business owner.

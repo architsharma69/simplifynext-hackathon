@@ -17,6 +17,7 @@ if str(SRC_DIR) not in sys.path:
 from crewai.flow.flow import Flow, and_, listen, router, start
 from crewai.flow.persistence import persist
 
+from crews.orchestrator import agent as orchestrator_agent
 from flows import placeholders
 from flows.state import OrchestratorState
 
@@ -27,6 +28,13 @@ def _truncate(value: str, length: int = 120) -> str:
     return value if len(value) <= length else value[:length] + "..."
 
 
+def _rephrased_query_for(routing_decision: dict, specialist: str, fallback: str) -> str:
+    for entry in routing_decision.get("rephrased_queries", []):
+        if entry.get("specialist") == specialist:
+            return entry.get("query", fallback)
+    return fallback
+
+
 @persist()
 class OrchestratorFlow(Flow[OrchestratorState]):
     @start()
@@ -35,24 +43,50 @@ class OrchestratorFlow(Flow[OrchestratorState]):
 
     @listen(receive_input)
     def classify_intent_step(self):
-        self.state.routing_decision = placeholders.classify_intent(self.state.user_input)
+        try:
+            decision = orchestrator_agent.route(
+                self.state.user_input, self.state.business_context
+            )
+            self.state.routing_decision = decision.model_dump()
+        except Exception:
+            logger.exception("routing failed, falling back to clarification")
+            self.state.routing_decision = {
+                "route_type": "clarify",
+                "specialists": [],
+                "rephrased_queries": [],
+                "direct_answer": None,
+                "clarifying_question": (
+                    "Sorry, I had trouble understanding that — could you rephrase your question?"
+                ),
+            }
         logger.info("routing decision: %s", self.state.routing_decision)
 
     @router(classify_intent_step)
     def check_confidence(self):
-        if self.state.routing_decision.get("needs_clarification"):
+        route_type = self.state.routing_decision.get("route_type")
+        if route_type == "clarify":
             return "clarify"
+        if route_type == "direct":
+            return "direct"
         return "proceed"
 
     @listen("clarify")
     def ask_clarification(self):
-        self.state.final_response = self.state.routing_decision.get("clarifying_question", "")
+        self.state.final_response = self.state.routing_decision.get("clarifying_question") or ""
         logger.info("asking clarification: %s", self.state.final_response)
+
+    @listen("direct")
+    def answer_directly(self):
+        self.state.final_response = self.state.routing_decision.get("direct_answer") or ""
+        logger.info("answering directly: %s", _truncate(self.state.final_response))
 
     @listen("proceed")
     def route_hr(self):
         if "hr" in self.state.routing_decision.get("specialists", []):
-            output = placeholders.run_hr(self.state.user_input)
+            sub_query = _rephrased_query_for(
+                self.state.routing_decision, "hr", self.state.user_input
+            )
+            output = placeholders.run_hr(sub_query)
             self.state.active_agent_outputs["hr"] = output
             self.state.invoked_specialists.append("hr")
             logger.info("hr crew invoked: %s", _truncate(output))
@@ -60,7 +94,10 @@ class OrchestratorFlow(Flow[OrchestratorState]):
     @listen("proceed")
     def route_finance(self):
         if "finance" in self.state.routing_decision.get("specialists", []):
-            output = placeholders.run_finance(self.state.user_input)
+            sub_query = _rephrased_query_for(
+                self.state.routing_decision, "finance", self.state.user_input
+            )
+            output = placeholders.run_finance(sub_query)
             self.state.active_agent_outputs["finance"] = output
             self.state.invoked_specialists.append("finance")
             logger.info("finance crew invoked: %s", _truncate(output))
@@ -68,14 +105,19 @@ class OrchestratorFlow(Flow[OrchestratorState]):
     @listen("proceed")
     def route_document(self):
         if "document" in self.state.routing_decision.get("specialists", []):
-            output = placeholders.run_document(self.state.user_input)
+            sub_query = _rephrased_query_for(
+                self.state.routing_decision, "document", self.state.user_input
+            )
+            output = placeholders.run_document(sub_query)
             self.state.active_agent_outputs["document"] = output
             self.state.invoked_specialists.append("document")
             logger.info("document crew invoked: %s", _truncate(output))
 
     @listen(and_(route_hr, route_finance, route_document))
     def synthesize_step(self):
-        self.state.final_response = placeholders.synthesize(self.state.active_agent_outputs)
+        self.state.final_response = orchestrator_agent.synthesize(
+            self.state.user_input, self.state.active_agent_outputs
+        )
         logger.info("synthesized response: %s", _truncate(self.state.final_response))
 
     def run_consultant_review(self):
@@ -87,3 +129,11 @@ class OrchestratorFlow(Flow[OrchestratorState]):
 
 if __name__ == "__main__":
     OrchestratorFlow().plot("OrchestratorFlow.html")
+
+    sample_questions = [
+        "I need to know how many people are on the roster this week, and also "
+        "whether we're over budget on the marketing expense",
+        "Hey! What can you help me with?",
+    ]
+    for question in sample_questions:
+        OrchestratorFlow().kickoff(inputs={"user_input": question})
