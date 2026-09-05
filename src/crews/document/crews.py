@@ -14,12 +14,12 @@ import json
 
 from crewai import Crew, Process
 
-from crews.agents import (
+from crews.document.agents import (
     financial_synthesizer_agent,
     grant_strategist_agent,
     statutory_compliance_agent,
 )
-from crews.tasks import make_financial_task, make_grant_tasks, make_statutory_tasks
+from crews.document.tasks import make_financial_task, make_grant_tasks, make_statutory_tasks
 
 
 def run_statutory_crew(company_profile_json: str, document_types: list[str]) -> str:

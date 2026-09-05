@@ -6,20 +6,23 @@ the one that approves a legal filing. Instead:
 
   1. A document-producing tool calls `request_escalation(...)` after it
      renders a document. This flips the item to PENDING_REVIEW and returns
-     immediately (non-blocking) — CrewAI Flows are synchronous per-step, so
-     we do NOT sleep/poll inside a Task. The Flow instead persists its state
-     and exits the run; a human decision resumes it later via the API.
+     immediately (non-blocking).
   2. A reviewer-facing FastAPI endpoint calls `resolve_escalation(...)` when
      a human approves/rejects/requests changes.
-  3. On the *next* user message for that session, the Flow's entry point
-     checks `has_pending_escalations(state)` first and short-circuits back
-     to the human's decision before doing anything else.
+  3. On the *next* user message for that session, whatever drives this crew
+     checks `has_pending_escalations(session_id)` first and short-circuits
+     back to the human's decision before doing anything else.
 
 Storage here is an in-memory dict for illustration. Swap `_STORE` for a
-Redis/Postgres-backed repository in production — the important part is that
-escalation state is queryable independently of any single Flow run, since
-the reviewer and the end user are different people hitting the API at
-different times.
+Redis/Postgres-backed repository in production.
+
+NOTE: this module intentionally works off a plain `session_id: str` rather
+than a shared Flow-state object (there's no HermesState in this repo — the
+top-level Flow uses OrchestratorState, which doesn't carry escalation
+fields yet). Keeping this decoupled means the document crew doesn't need
+to touch flows/state.py to function standalone; if/when escalation state
+should be visible to the top-level Flow, that's an explicit integration
+step, not an implicit dependency.
 """
 from __future__ import annotations
 
@@ -27,30 +30,27 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from models import DocumentType, EscalationRequest, EscalationStatus
-from flows.state import HermesState
+from crews.document.schemas import DocumentType, EscalationRequest, EscalationStatus
 
 # session_id -> {escalation_id -> EscalationRequest}
 _STORE: dict[str, dict[str, EscalationRequest]] = {}
 
 
 def request_escalation(
-    state: HermesState,
+    session_id: str,
     document_type: DocumentType,
     file_path: str,
     reason: str,
 ) -> EscalationRequest:
-    """Create a PENDING_REVIEW escalation and attach it to Flow state."""
+    """Create a PENDING_REVIEW escalation for this session."""
     req = EscalationRequest(
         escalation_id=str(uuid.uuid4()),
-        session_id=state.session_id,
+        session_id=session_id,
         document_type=document_type,
         file_path=file_path,
         reason=reason,
     )
-    _STORE.setdefault(state.session_id, {})[req.escalation_id] = req
-    state.pending_escalations.append(req)
-    state.note(f"Escalation requested for {document_type.value}: {reason}")
+    _STORE.setdefault(session_id, {})[req.escalation_id] = req
     return req
 
 
@@ -73,19 +73,16 @@ def resolve_escalation(
     return req
 
 
-def has_pending_escalations(state: HermesState) -> bool:
-    bucket = _STORE.get(state.session_id, {})
+def has_pending_escalations(session_id: str) -> bool:
+    bucket = _STORE.get(session_id, {})
     return any(r.status == EscalationStatus.PENDING_REVIEW for r in bucket.values())
 
 
-def sync_state_escalations(state: HermesState) -> None:
-    """Refresh state.pending_escalations from the store (call at Flow re-entry)."""
-    bucket = _STORE.get(state.session_id, {})
-    state.pending_escalations = [
-        r for r in bucket.values() if r.status == EscalationStatus.PENDING_REVIEW
-    ]
+def get_pending(session_id: str) -> list[EscalationRequest]:
+    bucket = _STORE.get(session_id, {})
+    return [r for r in bucket.values() if r.status == EscalationStatus.PENDING_REVIEW]
 
 
-def get_resolved_since_last_check(state: HermesState) -> list[EscalationRequest]:
-    bucket = _STORE.get(state.session_id, {})
+def get_resolved_since_last_check(session_id: str) -> list[EscalationRequest]:
+    bucket = _STORE.get(session_id, {})
     return [r for r in bucket.values() if r.status != EscalationStatus.PENDING_REVIEW]

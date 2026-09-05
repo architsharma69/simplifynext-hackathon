@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from crewai import Agent, LLM
 
-from crews.tools.statutory_tools import render_acra_document, validate_company_profile
-from crews.tools.financial_tools import (
+from crews.document.tools.statutory_tools import render_acra_document, validate_company_profile
+from crews.document.tools.financial_tools import (
     generate_financial_forecast,
     summarize_burn_and_breakeven,
 )
-from crews.tools.grant_tools import validate_grant_narrative, compile_grant_package
+from crews.document.tools.grant_tools import validate_grant_narrative, compile_grant_package
 
 # Single LLM config reused across agents; swap model/provider here.
 llm = LLM(model="claude-sonnet-4-6", temperature=0.2)
