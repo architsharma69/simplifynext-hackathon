@@ -8,3 +8,4 @@ httpx
 openai
 python-dotenv
 pyyaml
+streamlit
