@@ -6,10 +6,10 @@ from openai import OpenAI
 
 load_dotenv()
 
-API_KEY = os.getenv("openai_key")
+API_KEY = os.getenv("OPENAI_API_KEY")
 
 
-@pytest.mark.skipif(not API_KEY, reason="openai_key not set in .env")
+@pytest.mark.skipif(not API_KEY, reason="OPENAI_API_KEY not set in .env")
 def test_openai_key_is_valid():
     client = OpenAI(api_key=API_KEY)
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": "Say hello in exactly five words."}],
+        messages=[{"role": "user", "content": "Say bye in exactly five words."}],
     )
 
-    print(response.choices[0].message.content)
+    print(response)
