@@ -4,7 +4,9 @@
 
 See each subfolder's own README for what's inside it:
 - `flows/` — the core control flow that routes and answers user questions.
+- `crews/` — the specialist agents the flow routes to (orchestrator, document, hr).
 - `api/` — the FastAPI web server that exposes the flow over HTTP.
+- `knowledge/` — checked-in reference data the document specialists read from.
 - `tests/` — automated tests for everything above.
 
 ## Running the tests

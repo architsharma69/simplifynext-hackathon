@@ -24,3 +24,11 @@ DOCUMENT_TEAM_API_KEY = os.getenv("DOCUMENT_TEAM_API_KEY")
 DOCUMENT_OUTPUT_DIR = Path(
     os.environ.get("HERMES_DOCUMENT_DIR", ROOT_DIR / "output" / "documents")
 )
+
+# Model + API key for the HR / Workload Manager crew (crews/hr/agents.py's
+# hr_manager_agent). Mirrors DOCUMENT_TEAM_MODEL/_API_KEY above. Defaults to
+# openai/gpt-4o-mini like every other agent in this repo — see
+# crews/hr/README.md's "Model config" section for why this isn't the
+# original prototype's Bedrock config.
+HR_TEAM_MODEL = os.getenv("HR_TEAM_MODEL", "openai/gpt-4o-mini")
+HR_TEAM_API_KEY = os.getenv("HR_TEAM_API_KEY")
