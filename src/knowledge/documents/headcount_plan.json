@@ -1,0 +1,8 @@
+{
+  "lines": [
+    {"role_title": "Robotics Engineer", "department": "Engineering", "count": 2,
+     "monthly_salary_sgd": 6500, "start_month_index": 1},
+    {"role_title": "Sales Lead", "department": "Commercial", "count": 1,
+     "monthly_salary_sgd": 7000, "start_month_index": 3}
+  ]
+}
