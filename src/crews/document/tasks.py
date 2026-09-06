@@ -53,18 +53,18 @@ def build_statutory_render_prompt(document_types: list[str], company_profile_jso
     )
 
 
-def build_financial_prompt(financial_assumptions_json: str) -> str:
+def build_financial_prompt(financial_assumptions_json: str, computed_summary: str) -> str:
     return (
-        "Using the assumptions below (starting_monthly_revenue_sgd, "
-        "monthly_revenue_growth_pct, cogs_pct_of_revenue, "
-        "fixed_monthly_opex_sgd, starting_cash_sgd), generate the 3-year "
-        "forecast via the forecast tool, then produce a one-paragraph "
-        "plain-English summary via the summary tool. If any assumption looks "
-        "implausible (e.g. >50% monthly growth sustained for 36 months), say "
-        "so explicitly before proceeding.\n\n"
+        "The 3-year cash flow / P&L forecast below has already been computed "
+        "deterministically from the assumptions shown — you do not need to "
+        "(and should not try to) recompute or restate the underlying numbers "
+        "yourself; there is no tool to call here.\n\n"
         f"Assumptions JSON: {financial_assumptions_json}\n\n"
-        "Return the full FinancialForecast JSON followed by the plain-English "
-        "summary."
+        f"Computed summary: {computed_summary}\n\n"
+        "If any assumption looks implausible (e.g. >50% monthly growth "
+        "sustained for 36 months), say so explicitly. Then write a rigorous "
+        "one-paragraph plain-English summary of this forecast for a business "
+        "owner, grounded only in the computed summary above."
     )
 
 

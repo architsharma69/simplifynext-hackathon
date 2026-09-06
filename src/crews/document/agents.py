@@ -12,10 +12,6 @@ from crewai import Agent, LLM
 
 from Config import config
 from crews.document.tools.statutory_tools import render_acra_document, validate_company_profile
-from crews.document.tools.financial_tools import (
-    generate_financial_forecast,
-    summarize_burn_and_breakeven,
-)
 from crews.document.tools.grant_tools import validate_grant_narrative, compile_grant_package
 
 # Single LLM config reused across agents; DOCUMENT_TEAM_MODEL / _API_KEY in
@@ -50,17 +46,19 @@ statutory_compliance_agent = Agent(
 financial_synthesizer_agent = Agent(
     role="Internal Financial Synthesizer",
     goal=(
-        "Turn a small set of business assumptions into a rigorous 3-year cash "
-        "flow / P&L forecast, burn rate, and break-even estimate — using the "
-        "calculation tool, never mental arithmetic — so downstream agents can "
-        "rely on the numbers."
+        "Review a 3-year cash flow / P&L forecast that has already been "
+        "computed deterministically from a small set of business assumptions "
+        "— flag anything that looks implausible (e.g. negative COGS, "
+        "implausible growth), and write a rigorous plain-English summary of "
+        "it. Never recompute or retype the underlying numbers yourself, only "
+        "reference the ones you're given."
     ),
     backstory=(
         "A former startup CFO who now builds financial models full-time. "
         "Insists on stating assumptions explicitly and flags when a user's "
         "inputs look unrealistic (e.g. negative COGS, implausible growth)."
     ),
-    tools=[generate_financial_forecast, summarize_burn_and_breakeven],
+    tools=[],
     llm=llm,
     verbose=True,
     allow_delegation=False,

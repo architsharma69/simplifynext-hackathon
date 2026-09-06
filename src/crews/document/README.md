@@ -99,11 +99,16 @@ follow-up, not something quietly missing.
 - `headcount_plan` for grant requests comes from `knowledge/documents/headcount_plan.json`
   rather than a real HR crew (`flows/placeholders.run_hr` is still a stub) — swap the
   loader call in `_dispatch_grant` for a real HR crew's output once one exists.
-- Financial/grant agent output is parsed back into typed objects with a best-effort
-  "find the `{...}` blob in the raw text" heuristic
-  (`flows/orchestrator_flow._extract_json_blob`), not CrewAI's structured
-  `response_format`. Swap this for structured output on those agents' final tool
-  responses if reliability becomes an issue.
+- The financial forecast used to be regenerated/transcribed by the Financial
+  Synthesizer agent itself (via tool calls + a "find the `{...}` blob in the raw
+  text" heuristic), which reliably corrupted the 36-month JSON once enough
+  conversation history had accumulated. It's now computed directly in
+  `_dispatch_financial` (deterministic Python math, no LLM in the loop for the
+  numbers) and cached straight into `business_context` — the agent only ever
+  sees the precomputed summary and is asked for judgment/prose, never asked to
+  reproduce the numbers. The grant compile path (`_dispatch_grant` /
+  `compile_grant_package`) still returns the Grant & Capital Strategist's raw
+  text untouched, with no typed round-trip attempted.
 - Docx templates are built directly with `python-docx` rather than ACRA's actual
   official form templates (not publicly redistributable) — swap the `_render_*`
   bodies in `tools/statutory_tools.py` for `docxtpl` renders of the real templates
