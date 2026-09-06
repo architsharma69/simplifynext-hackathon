@@ -1,13 +1,3 @@
-# Things to note:
-## Why are we running these locally
-While we would have much preferred to deploy the API and both UIs, we have had a lot of trouble accessing the AWS accounts that were allocated to us. The password that I, the team leader, had set, just stopped working. 
-
-I tried all possible ways to reset the password, but they didn't work. We emailed the main point of contact for the hackathon, who told us to wait as their tech team works on a solution. That was on the 2nd of August, and we didn't get any response till now despite further prompts
-
-## Note on testing multiple UIs at once
-As of now, our 2 UIs are not made to be run simultaneously. To avoid any unexpected outcomes, please test out each UI one at a time, and make sure to shut down the UI once done testing to ensure the locally hosted processes don't persist past testing.
-
-
 # How to test main dashboard UI
 
 `python ui/streamlit/run_dev.py` starts two local processes side by side: the FastAPI backend (`uvicorn api.main:app` on port 8000) and the Streamlit app (port 8501), which talks to the backend over HTTP.
