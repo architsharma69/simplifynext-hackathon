@@ -156,3 +156,41 @@ def test_dispatch_grant_auto_chains_financial_forecast(monkeypatch):
     assert output == "Grant package compiled."
     assert len(fake_grant.calls) == 1
     assert flow.state.business_context.get("financial_forecast") is not None
+
+
+def test_dispatch_grant_edg_scheme_reaches_grant_agent(monkeypatch):
+    """Regression test: grant_narrative.json is keyed by scheme, and the EDG
+    scheme requires different narrative sections than Startup SG Founder
+    (see _REQUIRED_SECTIONS in grant_tools.py). Previously the fixture only
+    covered Startup SG Founder, so every EDG request failed
+    validate_grant_narrative before grant_strategist_agent ever ran.
+    """
+    forecast_json = json.dumps(
+        {
+            "months": [],
+            "currency": "SGD",
+            "monthly_burn_rate_sgd": 0.0,
+            "runway_months": -1,
+            "break_even_month_index": None,
+            "assumptions": {},
+        }
+    )
+    monkeypatch.setattr(
+        "flows.orchestrator_flow.financial_synthesizer_agent",
+        _FakeAgent(_FakeKickoffResult(raw=f"Here is the forecast: {forecast_json}")),
+    )
+
+    fake_grant = _FakeAgent(_FakeKickoffResult(raw="EDG grant package compiled."))
+    monkeypatch.setattr("flows.orchestrator_flow.grant_strategist_agent", fake_grant)
+
+    flow = OrchestratorFlow()
+    output = flow._dispatch_grant(
+        _routing_decision(
+            specialist="grant",
+            grant_scheme="enterprise_development_grant",
+            requested_amount_sgd=200000,
+        )
+    )
+
+    assert output == "EDG grant package compiled."
+    assert len(fake_grant.calls) == 1

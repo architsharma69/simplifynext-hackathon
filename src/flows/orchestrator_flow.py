@@ -266,7 +266,13 @@ class OrchestratorFlow(Flow[OrchestratorState]):
         except ValidationError as exc:
             return _describe_validation_errors(exc)
 
-        narrative_json = json.dumps(load_grant_narrative())
+        try:
+            narrative_json = json.dumps(load_grant_narrative(scheme))
+        except KeyError:
+            return (
+                f"Internal error: no grant narrative on file for scheme '{scheme}'. "
+                "Valid schemes: startup_sg_founder, enterprise_development_grant."
+            )
         narrative_issues = validate_grant_narrative.run(scheme, narrative_json)
         if narrative_issues != "OK":
             return narrative_issues

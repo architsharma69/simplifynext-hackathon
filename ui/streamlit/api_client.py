@@ -1,6 +1,9 @@
 import httpx
 
-TIMEOUT_SECONDS = 60.0
+# Orchestrator turns can involve multiple LLM/agent calls and occasionally
+# take several minutes, so this needs to be generous rather than a typical
+# HTTP request timeout.
+TIMEOUT_SECONDS = 300.0
 
 
 class OrchestratorError(Exception):
