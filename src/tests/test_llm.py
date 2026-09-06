@@ -22,7 +22,7 @@ if __name__ == "__main__":
     client = OpenAI(api_key=API_KEY)
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
         messages=[{"role": "user", "content": "Say bye in exactly five words."}],
     )
 

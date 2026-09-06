@@ -29,16 +29,22 @@ from crews.document.schemas import (
     CompanyProfile,
     DocumentRoutingDecision,
     FinancialForecast,
+    GrantPackage,
     HeadcountPlan,
+    RenderedDocument,
 )
 from crews.document.tasks import (
     build_document_routing_prompt,
-    build_financial_prompt,
-    build_grant_prompt,
-    build_statutory_render_prompt,
+    build_financial_summary_prompt,
+    build_grant_summary_prompt,
+    build_statutory_summary_prompt,
 )
-from crews.document.tools.grant_tools import validate_grant_narrative
-from crews.document.tools.statutory_tools import validate_company_profile
+from crews.document.tools.financial_tools import (
+    generate_financial_forecast,
+    summarize_burn_and_breakeven,
+)
+from crews.document.tools.grant_tools import compile_grant_package, validate_grant_narrative
+from crews.document.tools.statutory_tools import render_acra_document, validate_company_profile
 from crews.orchestrator import agent as orchestrator_agent
 from flows import placeholders
 from flows.state import OrchestratorState
@@ -75,20 +81,6 @@ def _describe_validation_errors(exc: ValidationError) -> str:
         "Internal error: the knowledge-base data is missing/invalid fields: "
         + ", ".join(fields)
     )
-
-
-def _extract_json_blob(raw: str) -> str | None:
-    """Best-effort pull of the first {...} JSON object out of raw agent text.
-
-    Agent.kickoff() output is free text that may wrap the JSON payload in
-    prose; this is a heuristic, not a parser, until the document specialists
-    move to CrewAI's structured `response_format` for their tool outputs too.
-    """
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return None
-    return raw[start : end + 1]
 
 
 @persist()
@@ -220,25 +212,61 @@ class OrchestratorFlow(Flow[OrchestratorState]):
         if issues != "OK":
             return issues
 
+        # render_acra_document is deterministic and called directly here —
+        # not handed to the agent as a tool — so there's no risk of the LLM
+        # inventing the wrong arguments for it (see crews/document/agents.py).
         document_types = decision.document_types or ["model_constitution"]
-        prompt = build_statutory_render_prompt(document_types, profile_json)
-        return statutory_compliance_agent.kickoff(prompt).raw
+        rendered_jsons = []
+        errors = []
+        for document_type in document_types:
+            result = render_acra_document.run(document_type, profile_json)
+            try:
+                rendered = RenderedDocument.model_validate_json(result)
+            except (ValidationError, ValueError):
+                errors.append(result)
+                continue
+            self.state.generated_documents.append(
+                {
+                    "document_type": rendered.document_type.value,
+                    "filename": Path(rendered.file_path).name,
+                    "file_path": rendered.file_path,
+                }
+            )
+            rendered_jsons.append(result)
+
+        if not rendered_jsons:
+            return "Couldn't render the requested document(s): " + "; ".join(errors)
+
+        prompt = build_statutory_summary_prompt(document_types, rendered_jsons)
+        raw = statutory_compliance_agent.kickoff(prompt).raw
+        if errors:
+            raw += "\n\nNote: " + "; ".join(errors)
+        return raw
 
     def _dispatch_financial(self) -> str:
+        # generate_financial_forecast/summarize_burn_and_breakeven are
+        # deterministic and called directly here — not handed to the agent
+        # as tools — so there's no risk of the LLM inventing the wrong
+        # arguments for them (see crews/document/agents.py).
         assumptions = load_financial_assumptions()
-        prompt = build_financial_prompt(json.dumps(assumptions))
-        raw = financial_synthesizer_agent.kickoff(prompt).raw
+        forecast_json = generate_financial_forecast.run(
+            assumptions["starting_monthly_revenue_sgd"],
+            assumptions["monthly_revenue_growth_pct"],
+            assumptions["cogs_pct_of_revenue"],
+            assumptions["fixed_monthly_opex_sgd"],
+            assumptions["starting_cash_sgd"],
+        )
+        try:
+            FinancialForecast.model_validate_json(forecast_json)
+        except (ValidationError, ValueError):
+            logger.exception("generate_financial_forecast returned an invalid FinancialForecast")
+            return "Internal error: could not generate a financial forecast from the knowledge-base assumptions."
 
-        blob = _extract_json_blob(raw)
-        if blob:
-            try:
-                forecast = FinancialForecast.model_validate_json(blob)
-                self.state.business_context["financial_forecast"] = json.loads(
-                    forecast.model_dump_json()
-                )
-            except (ValidationError, ValueError):
-                logger.warning("could not parse a FinancialForecast out of agent output")
-        return raw
+        self.state.business_context["financial_forecast"] = json.loads(forecast_json)
+        burn_summary = summarize_burn_and_breakeven.run(forecast_json)
+
+        prompt = build_financial_summary_prompt(forecast_json, burn_summary)
+        return financial_synthesizer_agent.kickoff(prompt).raw
 
     def _dispatch_grant(self, decision: DocumentRoutingDecision) -> str:
         context = self.state.business_context
@@ -275,7 +303,10 @@ class OrchestratorFlow(Flow[OrchestratorState]):
         if not requested_amount:
             return "How much funding (in SGD) are you requesting?"
 
-        prompt = build_grant_prompt(
+        # compile_grant_package is deterministic and called directly here —
+        # not handed to the agent as a tool — so there's no risk of the LLM
+        # inventing the wrong arguments for it (see crews/document/agents.py).
+        package_json = compile_grant_package.run(
             scheme,
             profile.model_dump_json(),
             json.dumps(context["financial_forecast"]),
@@ -283,6 +314,22 @@ class OrchestratorFlow(Flow[OrchestratorState]):
             narrative_json,
             requested_amount,
         )
+        try:
+            package = GrantPackage.model_validate_json(package_json)
+        except (ValidationError, ValueError):
+            logger.exception("compile_grant_package returned an invalid GrantPackage")
+            return "Internal error: could not compile the grant package."
+
+        if package.generated_document_path:
+            self.state.generated_documents.append(
+                {
+                    "document_type": f"grant_package_{package.scheme.value}",
+                    "filename": Path(package.generated_document_path).name,
+                    "file_path": package.generated_document_path,
+                }
+            )
+
+        prompt = build_grant_summary_prompt(package_json)
         return grant_strategist_agent.kickoff(prompt).raw
 
     @listen(and_(route_hr, route_finance, route_document))
@@ -302,10 +349,10 @@ class OrchestratorFlow(Flow[OrchestratorState]):
 if __name__ == "__main__":
     OrchestratorFlow().plot("OrchestratorFlow.html")
 
-    sample_questions = [
-        "I need to know how many people are on the roster this week, and also "
-        "whether we're over budget on the marketing expense",
-        "Hey! What can you help me with?",
-    ]
-    for question in sample_questions:
-        OrchestratorFlow().kickoff(inputs={"user_input": question})
+    # sample_questions = [
+    #     "I need to know how many people are on the roster this week, and also "
+    #     "whether we're over budget on the marketing expense",
+    #     "Hey! What can you help me with?",
+    # ]
+    # for question in sample_questions:
+    #     OrchestratorFlow().kickoff(inputs={"user_input": question})

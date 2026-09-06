@@ -1,7 +1,11 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
+from api import documents
 from api.main import app
 from api.sessions import get_session
+from Config.config import DOCUMENT_OUTPUT_DIR
 
 client = TestClient(app)
 
@@ -55,6 +59,31 @@ def test_chat_missing_field_returns_422():
 
     assert resp.status_code == 422
     assert "detail" in resp.json()
+
+
+def test_document_registry_round_trip():
+    document_id = documents.register_document("/tmp/some/path.docx")
+    assert documents.get_document_path(document_id) == "/tmp/some/path.docx"
+    assert documents.get_document_path("not-a-real-id") is None
+
+
+def test_download_document_returns_file_bytes():
+    Path(DOCUMENT_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    file_path = Path(DOCUMENT_OUTPUT_DIR) / "test_download_document.docx"
+    file_path.write_bytes(b"fake docx content")
+    document_id = documents.register_document(str(file_path))
+
+    try:
+        resp = client.get(f"/documents/{document_id}")
+        assert resp.status_code == 200
+        assert resp.content == b"fake docx content"
+    finally:
+        file_path.unlink(missing_ok=True)
+
+
+def test_download_document_unknown_id_returns_404():
+    resp = client.get("/documents/not-a-real-id")
+    assert resp.status_code == 404
 
 
 def test_chat_error_returns_clean_envelope(monkeypatch):

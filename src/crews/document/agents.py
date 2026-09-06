@@ -1,22 +1,26 @@
 """
 crews/agents.py
-Agent definitions for HERMES's three specialists. Each agent is scoped to a
-narrow toolset on purpose — the Statutory agent cannot touch grant tools,
-the Grant agent cannot render ACRA forms directly, etc. This keeps the
-delegation graph inside each Crew shallow and makes prompt-injection /
-scope-creep failures easier to reason about.
+Agent definitions for HERMES's three specialists. None of them hold tools:
+every deterministic calculation/rendering/validation call
+(generate_financial_forecast, render_acra_document, compile_grant_package,
+validate_company_profile, validate_grant_narrative) is made directly from
+Python in flows/orchestrator_flow.py's _dispatch_* methods, and the result is
+handed to the agent as plain text. This isn't just tidiness — letting an LLM
+choose a tool's arguments for something like generate_financial_forecast
+(5 required numbers) is a real reliability risk: smaller models have been
+observed inventing a full forecast object and passing that as the "argument"
+instead of the assumption inputs the tool actually wants, which raises a
+Pydantic "Field required" error at the tool-call boundary. Removing the
+tool-calling step removes that failure mode entirely rather than reducing
+its odds. Each agent's only job now is narrating an already-computed,
+already-validated result for the business owner — no tool, no calculation,
+no chance of hallucinating the shape of one.
 """
 from __future__ import annotations
 
 from crewai import Agent, LLM
 
 from Config import config
-from crews.document.tools.statutory_tools import render_acra_document, validate_company_profile
-from crews.document.tools.financial_tools import (
-    generate_financial_forecast,
-    summarize_burn_and_breakeven,
-)
-from crews.document.tools.grant_tools import validate_grant_narrative, compile_grant_package
 
 # Single LLM config reused across agents; DOCUMENT_TEAM_MODEL / _API_KEY in
 # Config/config.py control model/provider and credentials for the whole
@@ -29,10 +33,11 @@ llm = LLM(
 statutory_compliance_agent = Agent(
     role="Statutory Compliance Specialist",
     goal=(
-        "Collect and validate everything needed to file Singapore ACRA BizFile+ "
-        "incorporation paperwork, then render the required documents exactly. "
-        "Never invent director/shareholder details the user has not provided; "
-        "ask instead of guessing."
+        "Given ACRA BizFile+ incorporation documents that have already been "
+        "rendered and validated deterministically, write a clear, friendly "
+        "confirmation for the business owner of exactly what was produced. "
+        "Never restate or alter the underlying data, and never claim a "
+        "document was rendered if it wasn't."
     ),
     backstory=(
         "A meticulous Singapore corporate-secretarial professional who has filed "
@@ -41,7 +46,7 @@ statutory_compliance_agent = Agent(
         "the Model Constitution, Form 45/45B, First Board Resolutions, and the "
         "Register of Registrable Controllers (RORC)."
     ),
-    tools=[validate_company_profile, render_acra_document],
+    tools=[],
     llm=llm,
     verbose=True,
     allow_delegation=False,
@@ -50,17 +55,18 @@ statutory_compliance_agent = Agent(
 financial_synthesizer_agent = Agent(
     role="Internal Financial Synthesizer",
     goal=(
-        "Turn a small set of business assumptions into a rigorous 3-year cash "
-        "flow / P&L forecast, burn rate, and break-even estimate — using the "
-        "calculation tool, never mental arithmetic — so downstream agents can "
-        "rely on the numbers."
+        "Given a 3-year cash flow / P&L forecast that has already been "
+        "computed deterministically, write a clear plain-English summary for "
+        "the business owner — burn rate, runway, break-even timing — and "
+        "flag if the underlying assumptions look unrealistic (e.g. negative "
+        "COGS, implausible growth). Never recompute or alter any number."
     ),
     backstory=(
         "A former startup CFO who now builds financial models full-time. "
         "Insists on stating assumptions explicitly and flags when a user's "
         "inputs look unrealistic (e.g. negative COGS, implausible growth)."
     ),
-    tools=[generate_financial_forecast, summarize_burn_and_breakeven],
+    tools=[],
     llm=llm,
     verbose=True,
     allow_delegation=False,
@@ -69,10 +75,11 @@ financial_synthesizer_agent = Agent(
 grant_strategist_agent = Agent(
     role="Grant & Capital Strategist",
     goal=(
-        "Compile a complete, compelling Startup SG Founder or EDG grant package "
-        "using the financial forecast and headcount plan already produced by "
-        "other specialists — never fabricate financials or headcount, only "
-        "reference what has already been generated."
+        "Given a Startup SG Founder or EDG grant package that has already "
+        "been compiled deterministically from validated financials, "
+        "headcount, and narrative sections, write a clear confirmation for "
+        "the business owner of what was compiled and where it stands. Never "
+        "fabricate or alter any financials, headcount, or narrative content."
     ),
     backstory=(
         "A Singapore grant-writing consultant who has helped dozens of startups "
@@ -80,7 +87,7 @@ grant_strategist_agent = Agent(
         "narrative sections each scheme's assessors expect and pushes back on "
         "thin or generic answers."
     ),
-    tools=[validate_grant_narrative, compile_grant_package],
+    tools=[],
     llm=llm,
     verbose=True,
     allow_delegation=False,

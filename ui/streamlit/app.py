@@ -13,7 +13,7 @@ _UI_DIR = Path(__file__).resolve().parent
 if str(_UI_DIR) not in sys.path:
     sys.path.insert(0, str(_UI_DIR))
 
-from api_client import OrchestratorError, send_message
+from api_client import OrchestratorError, fetch_document_bytes, send_message
 
 API_BASE_URL = os.getenv("BRO_API_URL", "http://localhost:8000")
 API_PORT = urlparse(API_BASE_URL).port or 8000
@@ -116,10 +116,17 @@ if user_input:
                 if chart_data:
                     st.line_chart(chart_data)
 
-                document = metadata.get("document")
-                if document:
+                for doc in metadata.get("documents", []):
+                    filename = doc.get("filename", "document")
+                    document_id = doc.get("document_id")
+                    try:
+                        content = fetch_document_bytes(API_BASE_URL, document_id)
+                    except OrchestratorError as exc:
+                        st.caption(f"Could not fetch {filename}: {exc}")
+                        continue
                     st.download_button(
-                        label=f"Download {document.get('filename', 'document')}",
-                        data=document.get("content", b""),
-                        file_name=document.get("filename", "document"),
+                        label=f"Download {filename}",
+                        data=content,
+                        file_name=filename,
+                        key=document_id,
                     )
