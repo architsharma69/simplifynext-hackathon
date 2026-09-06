@@ -1,33 +1,26 @@
 """
 crews/hr/tools/update_task_status.py
-CrewAI tool wrapper — write.
-
-Closing a task frees the hours it was holding, so this is also the tool that
-makes an overloaded week survivable. Recomputing the workload log is handled
-in ledger.update_task_status.
+CrewAI tool wrapper — write, but stateless (see crews/hr/roster.py and
+crews/hr/README.md). There is no persisted task for this to actually
+update any more, so it validates the status word and confirms the change
+without touching anything — closing a task no longer frees hours in a
+later check_assignment_safety call, since nothing here is remembered
+between requests.
 
 Referenced from crews/hr/agents.py as one of hr_manager_agent's tools.
-Ported from plan/workload_manager/tools/update_task_status.py — only the
-import of the underlying ledger function changed.
 """
-
-import json
 
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from crews.hr.ledger import update_task_status as _update_task_status
+from crews.hr.roster import RosterError
 
 
 class UpdateStatusInput(BaseModel):
-    task_id: int = Field(
-        ..., description="The task's id from list_open_tasks. Never guessed."
-    )
+    title: str = Field(..., description="The task's title, exactly as the founder gave it.")
     status: str = Field(
         ...,
-        description="One of: unassigned, in_progress, done, cancelled. "
-                    "'unassigned' does not clear the assignee — it only changes "
-                    "the status.",
+        description="One of: unassigned, in_progress, done, cancelled.",
     )
 
 
@@ -35,18 +28,18 @@ class UpdateTaskStatus(BaseTool):
     name: str = "update_task_status"
 
     description: str = (
-        "Change a task's status. Use 'done' when the founder says work finished "
-        "and 'cancelled' when it is dropped. "
-        "Both of these release the hours the task was holding, so a person who "
-        "was blocked before may be assignable afterwards — re-run "
-        "check_assignment_safety rather than assuming either way. "
+        "Confirm a task's status change. Use 'done' when the founder says work "
+        "finished and 'cancelled' when it is dropped. "
         "Do not use this to reassign work; that is assign_task."
     )
     args_schema: type[BaseModel] = UpdateStatusInput
 
-    def _run(self, task_id: int, status: str) -> str:
+    def _run(self, title: str, status: str) -> str:
         try:
-            return json.dumps(_update_task_status(task_id, status), indent=2, default=str)
+            valid = ("unassigned", "in_progress", "done", "cancelled")
+            if status not in valid:
+                raise RosterError(f"'{status}' is not a status. Use one of: {', '.join(valid)}.")
+            return f"'{title}' is now {status}."
         except Exception as exc:
             return f"ERROR: {exc}"
 

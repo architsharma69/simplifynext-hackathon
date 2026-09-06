@@ -16,15 +16,16 @@ has written.
 
 When the Telegram layer lands, replace `_deliver` and leave the rest alone.
 
-Ported from plan/workload_manager/notify.py with no logic changes — only the
-import (`from ledger import ...` -> `from crews.hr.ledger import ...`).
+Ported from plan/workload_manager/notify.py — only the import of the name
+lookup changed (`crews.hr.ledger` -> `crews.hr.roster`, since the ledger
+is gone; see crews/hr/roster.py).
 """
 
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from crews.hr.ledger import LedgerError, get_person, get_team_roster
+from crews.hr.roster import RosterError, get_person, get_team_roster
 
 OUTBOX_PATH = Path(__file__).resolve().parent / "outbox.jsonl"
 
@@ -46,20 +47,20 @@ def notify_person(person: str, message: str, urgency: str = "normal") -> dict:
     """Queue a message for one person. Returns a quotable confirmation."""
     valid_urgency = ("low", "normal", "high")
     if urgency not in valid_urgency:
-        raise LedgerError(
+        raise RosterError(
             f"'{urgency}' is not an urgency. Use one of: {', '.join(valid_urgency)}."
         )
 
     who = get_person(person)
     if not who:
         names = ", ".join(p["name"] for p in get_team_roster())
-        raise LedgerError(f"No one named '{person}' is in the ledger. The team is: {names}.")
+        raise RosterError(f"No one named '{person}' is in the roster. The team is: {names}.")
 
     text = (message or "").strip()
     if not text:
-        raise LedgerError("A notification needs a message.")
+        raise RosterError("A notification needs a message.")
     if len(text) > MAX_CHARS:
-        raise LedgerError(
+        raise RosterError(
             f"That message is {len(text)} characters. Keep it under {MAX_CHARS} — "
             "these land on a phone."
         )

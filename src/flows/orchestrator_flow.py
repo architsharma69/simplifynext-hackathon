@@ -44,6 +44,7 @@ from crews.document.tools.financial_tools import (
 from crews.document.tools.grant_tools import validate_grant_narrative
 from crews.document.tools.statutory_tools import validate_company_profile
 from crews.hr.agents import hr_manager_agent
+from crews.hr.roster import build_snapshot
 from crews.hr.schemas import WorkloadResponse
 from crews.hr.tasks import build_hr_prompt
 from crews.orchestrator import agent as orchestrator_agent
@@ -141,17 +142,24 @@ class OrchestratorFlow(Flow[OrchestratorState]):
             logger.info("hr crew invoked: %s", _truncate(output))
 
     def _run_hr_team(self, sub_query: str) -> str:
-        """hr_manager_agent handles the rephrased request end to end using
-        its ledger tools (see crews/hr/README.md) — there's no team-lead
-        routing step here the way there is for crews/document, since HR is
-        one agent, not several specialists to choose between.
+        """hr_manager_agent handles the rephrased request end to end — there's
+        no team-lead routing step here the way there is for crews/document,
+        since HR is one agent, not several specialists to choose between.
+
+        The team roster and current workload are never gathered here: they're
+        computed by crews.hr.roster.build_snapshot() straight from
+        knowledge/hr/team_roster.json and injected directly into the prompt
+        (crews/hr/tasks.py), the same pattern _dispatch_statutory etc. use for
+        knowledge/documents/*.json — see crews/hr/README.md.
 
         Returns WorkloadResponse.message (what the founder actually reads)
         rather than the full structured object, matching the plain-string
         contract every other _run_*_team-style dispatch hands back to
         synthesize_step via active_agent_outputs.
         """
-        prompt = build_hr_prompt(sub_query, date.today().isoformat())
+        today = date.today()
+        snapshot = build_snapshot(today)
+        prompt = build_hr_prompt(sub_query, today.isoformat(), json.dumps(snapshot, default=str))
         try:
             result = hr_manager_agent.kickoff(prompt, response_format=WorkloadResponse)
         except Exception:

@@ -1,23 +1,21 @@
 """
 crews/hr/tools/log_wellbeing_event.py
-CrewAI tool wrapper — write.
-
-Leave logged here immediately reduces that person's effective capacity, which
-means the next safety check refuses work the previous one would have allowed.
-That is the point: this is how the guardrail learns about the world.
+CrewAI tool wrapper — write, but stateless (see crews/hr/roster.py and
+crews/hr/README.md). Confirms the event after checking the person is real
+and the event is well-formed; it no longer reduces anyone's effective
+capacity, since nothing persists between requests. Leave/sick days that
+should count against capacity for the demo belong in
+knowledge/hr/team_roster.json's per-person "leave" list instead.
 
 Referenced from crews/hr/agents.py as one of hr_manager_agent's tools.
-Ported from plan/workload_manager/tools/log_wellbeing_event.py — only the
-import of the underlying ledger function changed.
 """
 
-import json
 from typing import Optional
 
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from crews.hr.ledger import log_wellbeing_event as _log_wellbeing_event
+from crews.hr.roster import RosterError, get_person, get_team_roster
 
 
 class WellbeingInput(BaseModel):
@@ -46,10 +44,8 @@ class LogWellbeingEvent(BaseTool):
     name: str = "log_wellbeing_event"
 
     description: str = (
-        "Record leave, sickness, an overload concern, or an approved override "
-        "against a person. "
-        "Logging leave or sickness cuts that person's capacity for those days "
-        "straight away, so do it BEFORE placing any work in that window. "
+        "Confirm recording leave, sickness, an overload concern, or an approved "
+        "override against a person. "
         "Log 'flagged' when you tell the founder somebody is carrying too much, so "
         "the pattern is on record and not just in a chat message. "
         "Never record anything about performance, attitude or a medical reason — "
@@ -60,8 +56,17 @@ class LogWellbeingEvent(BaseTool):
     def _run(self, person: str, type: str, note: str = "",
              start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
         try:
-            result = _log_wellbeing_event(person, type, note, start_date, end_date)
-            return json.dumps(result, indent=2, default=str)
+            valid = ("leave", "sick", "overloaded", "flagged", "override_approved")
+            if type not in valid:
+                raise RosterError(f"'{type}' is not an event type. Use one of: {', '.join(valid)}.")
+            who = get_person(person)
+            if not who:
+                names = ", ".join(p["name"] for p in get_team_roster())
+                raise RosterError(f"No one named '{person}' is in the roster. The team is: {names}.")
+            if type in ("leave", "sick") and not (start_date and end_date):
+                raise RosterError("Leave and sick events need both start_date and end_date.")
+            span = f" from {start_date} to {end_date}" if start_date else ""
+            return f"Logged '{type}' for {who['name']}{span}."
         except Exception as exc:
             return f"ERROR: {exc}"
 

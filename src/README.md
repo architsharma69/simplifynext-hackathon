@@ -9,17 +9,6 @@ See each subfolder's own README for what's inside it:
 - `knowledge/` — checked-in reference data the document specialists read from.
 - `tests/` — automated tests for everything above.
 
-## First-time setup
-
-The HR crew keeps a local SQLite ledger that is gitignored, so seed it once
-before running the API (the tests don't need it, a live run does):
-
-```bash
-cd src && python -m crews.hr.seed
-```
-
-See `crews/hr/README.md` for why it isn't committed.
-
 ## Running the tests
 
 The test files under `tests/` aren't meant to be run directly (`python test_api.py` does nothing useful — the test functions never get called on their own). Instead, `pytest` finds and runs them for you:

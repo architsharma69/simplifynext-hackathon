@@ -4,7 +4,14 @@ Agent definition for the HR / Workload Manager specialist. Mirrors
 crews/document/agents.py's pattern (a plain CrewAI Agent built from
 Config-driven model settings) — but there's only one agent here, not a team
 of specialists, so there's no "team lead" routing step: hr_manager_agent
-handles a rephrased HR request end to end using its ten ledger tools.
+handles a rephrased HR request end to end.
+
+The team roster and current workload are injected directly into its prompt
+(crews/hr/tasks.py, built from crews/hr/roster.py's snapshot of
+knowledge/hr/team_roster.json) the same way crews/document injects its
+knowledge-base JSON, so there are no read tools here any more — only the
+safety guardrail and the (stateless — see crews/hr/README.md) write-shaped
+tools remain.
 
 Ported from the standalone workload_manager prototype's
 agents/hr_manager.jsonc (role/goal/backstory/tool list/settings), rebuilt as
@@ -16,10 +23,6 @@ from __future__ import annotations
 from crewai import Agent, LLM
 
 from Config import config
-from crews.hr.tools.get_team_roster import get_team_roster
-from crews.hr.tools.get_person_workload import get_person_workload
-from crews.hr.tools.list_open_tasks import list_open_tasks
-from crews.hr.tools.get_capacity_forecast import get_capacity_forecast
 from crews.hr.tools.check_assignment_safety import check_assignment_safety
 from crews.hr.tools.create_task import create_task
 from crews.hr.tools.assign_task import assign_task
@@ -53,7 +56,8 @@ hr_manager_agent = Agent(
         "had been sitting in the data for weeks with nobody reading it.\n\n"
         "So now you count. You are the only person here whose job is to "
         "know what each person is actually carrying, and you trust the "
-        "ledger over anyone's optimism, including the founder's.\n\n"
+        "numbers in front of you over anyone's optimism, including the "
+        "founder's.\n\n"
         "You are warm with the team and blunt with the founder. When you "
         "place work you say who, why, and what trade-off you made. When "
         "placing it would hurt someone, you say no and offer the next best "
@@ -64,10 +68,6 @@ hr_manager_agent = Agent(
         "the only things you actually know."
     ),
     tools=[
-        get_team_roster,
-        get_person_workload,
-        list_open_tasks,
-        get_capacity_forecast,
         check_assignment_safety,
         create_task,
         assign_task,
@@ -81,7 +81,7 @@ hr_manager_agent = Agent(
     # No agent-level "guardrail" here on purpose (mirrors the original
     # hr_manager.jsonc) — that option is checked by an LLM, which means it
     # can be talked around. The real guardrail is check_assignment_safety(),
-    # plain Python that ledger.assign_task refuses to run without.
+    # plain Python that assign_task refuses to run without.
     max_iter=12,
     max_rpm=20,
     max_execution_time=60,
@@ -89,9 +89,9 @@ hr_manager_agent = Agent(
     # Conversation history comes from OrchestratorState/session store, not
     # CrewAI memory — two memory systems that disagree is a bad time.
     memory=False,
-    # IMPORTANT: the ledger changes mid-conversation. With caching on, asking
-    # "how loaded is Priya now?" right after assigning her a task would
-    # return the stale pre-assignment number.
+    # Tool responses are just arithmetic over a static fixture now (see
+    # crews/hr/roster.py), so there's no real staleness risk left — kept
+    # off anyway since it costs nothing here.
     cache=False,
     respect_context_window=True,
 )

@@ -8,15 +8,19 @@ always give the same verdict.
 
 Thresholds are POLICY, not truth. In a real deployment the founder sets them.
 
-Ported from plan/workload_manager/safety.py with no logic changes — only the
-imports (`from db import ...` / `from ledger import ...` -> `crews.hr.*`).
+Ported from plan/workload_manager/safety.py with the same rules and
+thresholds — only the data source changed: reads now come from
+crews.hr.roster (backed by the static knowledge/hr/team_roster.json
+fixture) instead of a SQLite ledger, and people are looked up by name
+throughout rather than by a database id.
 """
 
 from dataclasses import dataclass, asdict
 from datetime import date
 
-from crews.hr.db import week_of, is_out_of_hours
-from crews.hr.ledger import (
+from crews.hr.roster import (
+    week_of,
+    is_out_of_hours,
     get_person,
     assigned_hours,
     effective_capacity,
@@ -54,7 +58,7 @@ def check_assignment_safety(person: str, est_hours: float, due_date: str) -> Ver
     who = get_person(person)
     if not who:
         names = ", ".join(p["name"] for p in get_team_roster())
-        return Verdict("BLOCK", f"No one named '{person}' is in the ledger. The team is: {names}.", 0.0)
+        return Verdict("BLOCK", f"No one named '{person}' is in the roster. The team is: {names}.", 0.0)
 
     try:
         due = date.fromisoformat(due_date)
@@ -67,14 +71,14 @@ def check_assignment_safety(person: str, est_hours: float, due_date: str) -> Ver
     week = week_of(due)
 
     # 1 — leave beats everything
-    if on_leave(who["id"], due_date):
+    if on_leave(who["name"], due_date):
         return Verdict("BLOCK", f"{who['name']} is on logged leave on {due_date}.", 0.0)
 
-    capacity = effective_capacity(who["id"], week)
+    capacity = effective_capacity(who["name"], week)
     if capacity <= 0:
         return Verdict("BLOCK", f"{who['name']} has no working capacity in {week}.", 0.0)
 
-    committed = assigned_hours(who["id"], week)
+    committed = assigned_hours(who["name"], week)
     load = (committed + est_hours) / capacity
 
     # 2 — hard capacity ceiling
@@ -87,7 +91,7 @@ def check_assignment_safety(person: str, est_hours: float, due_date: str) -> Ver
         )
 
     # 3 — sustained overload, even when this week alone is survivable
-    streak = overload_streak(who["id"], week)
+    streak = overload_streak(who["name"], week)
     if streak >= OVERLOAD_STREAK_LIMIT - 1 and load >= CAPACITY_WARN:
         return Verdict(
             "BLOCK",

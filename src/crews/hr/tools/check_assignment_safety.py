@@ -1,8 +1,8 @@
 """
 crews/hr/tools/check_assignment_safety.py
-CrewAI tool wrapper — the pattern all ten follow.
+CrewAI tool wrapper — the pattern all six follow.
 
-Wrappers stay thin on purpose: the logic lives in safety.py / ledger.py where
+Wrappers stay thin on purpose: the logic lives in safety.py / roster.py where
 it can be tested without a model. All this layer does is (a) describe the tool
 to the LLM and (b) turn exceptions into text the agent can recover from.
 

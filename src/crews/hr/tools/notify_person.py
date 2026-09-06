@@ -1,11 +1,12 @@
 """
 crews/hr/tools/notify_person.py
 CrewAI tool wrapper — write, backed by crews.hr.notify rather than
-crews.hr.ledger.
+crews.hr.roster.
 
-The other nine tools sit on the ledger. This one does not, because sending a
-message is not a ledger fact. Until the Telegram layer exists, notify.py
-queues to outbox.jsonl and this tool says "queued", which is true.
+Sending a message isn't roster data, so it doesn't go through
+build_snapshot() or the other stateless write tools. Until the Telegram
+layer exists, notify.py queues to outbox.jsonl and this tool says "queued",
+which is true.
 
 Referenced from crews/hr/agents.py as one of hr_manager_agent's tools.
 Ported from plan/workload_manager/tools/notify_person.py — only the import
@@ -43,9 +44,9 @@ class NotifyPerson(BaseTool):
         "Queue a message to one member of the team — to tell them work has landed "
         "on them, that something moved, or to check in when their load has been "
         "high. Returns a confirmation once it is queued for delivery. "
-        "Use it AFTER the ledger write it describes, never instead of one, and "
-        "never to tell somebody about work that was blocked or is still waiting on "
-        "the founder's confirmation. "
+        "Use it AFTER the assign_task/create_task/etc. call it describes, never "
+        "instead of one, and never to tell somebody about work that was blocked "
+        "or is still waiting on the founder's confirmation. "
         "Say what changed and what you need from them. Do not pass on the "
         "founder's frustration, and do not discuss anyone else's workload."
     )

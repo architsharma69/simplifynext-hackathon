@@ -1,0 +1,190 @@
+{
+  "people": [
+    {
+      "name": "Priya Menon",
+      "role": "Senior Engineer",
+      "skills": "backend,python,infra",
+      "weekly_capacity_hrs": 40,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@priya",
+      "overloaded_streak_weeks": 2,
+      "leave": []
+    },
+    {
+      "name": "Rahul Iyer",
+      "role": "Engineer",
+      "skills": "backend,python,onboarding",
+      "weekly_capacity_hrs": 40,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@rahul",
+      "overloaded_streak_weeks": 0,
+      "leave": []
+    },
+    {
+      "name": "Wei Ling Tan",
+      "role": "Designer",
+      "skills": "design,ux,research",
+      "weekly_capacity_hrs": 40,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@weiling",
+      "overloaded_streak_weeks": 0,
+      "leave": [
+        {
+          "start_offset_days": 3,
+          "end_offset_days": 4,
+          "note": "Family trip"
+        }
+      ]
+    },
+    {
+      "name": "Daniel Osei",
+      "role": "Engineer",
+      "skills": "frontend,react,design",
+      "weekly_capacity_hrs": 40,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@daniel",
+      "overloaded_streak_weeks": 0,
+      "leave": []
+    },
+    {
+      "name": "Sofia Marchi",
+      "role": "Product",
+      "skills": "product,research,writing",
+      "weekly_capacity_hrs": 32,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@sofia",
+      "overloaded_streak_weeks": 0,
+      "leave": []
+    },
+    {
+      "name": "Ken Nakamura",
+      "role": "Engineer",
+      "skills": "backend,data,python",
+      "weekly_capacity_hrs": 40,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@ken",
+      "overloaded_streak_weeks": 0,
+      "leave": []
+    },
+    {
+      "name": "Amara Nwosu",
+      "role": "Ops",
+      "skills": "ops,finance,writing",
+      "weekly_capacity_hrs": 24,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@amara",
+      "overloaded_streak_weeks": 0,
+      "leave": []
+    },
+    {
+      "name": "Tom Bradley",
+      "role": "Founder",
+      "skills": "sales,product",
+      "weekly_capacity_hrs": 40,
+      "timezone": "Asia/Singapore",
+      "contact_handle": "@tom",
+      "overloaded_streak_weeks": 0,
+      "leave": []
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Migrate billing service to new queue",
+      "assignee": "Priya Menon",
+      "est_hours": 18,
+      "due_offset_days": 3,
+      "status": "in_progress"
+    },
+    {
+      "title": "Fix payment webhook retries",
+      "assignee": "Priya Menon",
+      "est_hours": 14,
+      "due_offset_days": 4,
+      "status": "in_progress"
+    },
+    {
+      "title": "On-call handover doc",
+      "assignee": "Priya Menon",
+      "est_hours": 8,
+      "due_offset_days": 2,
+      "status": "in_progress"
+    },
+    {
+      "title": "Rework rate limiter",
+      "assignee": "Priya Menon",
+      "est_hours": 16,
+      "due_offset_days": 10,
+      "status": "in_progress"
+    },
+    {
+      "title": "Postgres upgrade dry run",
+      "assignee": "Priya Menon",
+      "est_hours": 14,
+      "due_offset_days": 11,
+      "status": "in_progress"
+    },
+    {
+      "title": "Onboarding email sequence",
+      "assignee": "Rahul Iyer",
+      "est_hours": 8,
+      "due_offset_days": 3,
+      "status": "in_progress"
+    },
+    {
+      "title": "Fix signup validation bug",
+      "assignee": "Rahul Iyer",
+      "est_hours": 6,
+      "due_offset_days": 4,
+      "status": "in_progress"
+    },
+    {
+      "title": "Dashboard redesign — first pass",
+      "assignee": "Wei Ling Tan",
+      "est_hours": 20,
+      "due_offset_days": 4,
+      "status": "in_progress"
+    },
+    {
+      "title": "Settings page rebuild",
+      "assignee": "Daniel Osei",
+      "est_hours": 12,
+      "due_offset_days": 3,
+      "status": "in_progress"
+    },
+    {
+      "title": "Q4 roadmap draft",
+      "assignee": "Sofia Marchi",
+      "est_hours": 10,
+      "due_offset_days": 4,
+      "status": "in_progress"
+    },
+    {
+      "title": "Analytics pipeline cleanup",
+      "assignee": "Ken Nakamura",
+      "est_hours": 16,
+      "due_offset_days": 3,
+      "status": "in_progress"
+    },
+    {
+      "title": "Data retention policy",
+      "assignee": "Ken Nakamura",
+      "est_hours": 6,
+      "due_offset_days": 10,
+      "status": "in_progress"
+    },
+    {
+      "title": "Vendor invoices",
+      "assignee": "Amara Nwosu",
+      "est_hours": 6,
+      "due_offset_days": 2,
+      "status": "in_progress"
+    },
+    {
+      "title": "Investor update deck",
+      "assignee": null,
+      "est_hours": 6,
+      "due_offset_days": 4,
+      "status": "unassigned"
+    }
+  ]
+}
