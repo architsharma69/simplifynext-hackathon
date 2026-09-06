@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 from pathlib import Path
@@ -16,10 +17,37 @@ if str(SRC_DIR) not in sys.path:
 
 from crewai.flow.flow import Flow, and_, listen, router, start
 from crewai.flow.persistence import persist
+from pydantic import ValidationError
 
+from crews.document.agents import (
+    document_team_lead_agent,
+    financial_synthesizer_agent,
+    grant_strategist_agent,
+    statutory_compliance_agent,
+)
+from crews.document.schemas import (
+    CompanyProfile,
+    DocumentRoutingDecision,
+    FinancialForecast,
+    HeadcountPlan,
+)
+from crews.document.tasks import (
+    build_document_routing_prompt,
+    build_financial_prompt,
+    build_grant_prompt,
+    build_statutory_render_prompt,
+)
+from crews.document.tools.grant_tools import validate_grant_narrative
+from crews.document.tools.statutory_tools import validate_company_profile
 from crews.orchestrator import agent as orchestrator_agent
 from flows import placeholders
 from flows.state import OrchestratorState
+from knowledge.documents import (
+    load_company_profile,
+    load_financial_assumptions,
+    load_grant_narrative,
+    load_headcount_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +61,34 @@ def _rephrased_query_for(routing_decision: dict, specialist: str, fallback: str)
         if entry.get("specialist") == specialist:
             return entry.get("query", fallback)
     return fallback
+
+
+def _describe_validation_errors(exc: ValidationError) -> str:
+    """Formats a Pydantic ValidationError against knowledge/documents/*.json.
+
+    These files are checked-in fixtures, not conversational input, so a
+    failure here means the fixture itself doesn't match its schema — a repo
+    bug, not something the business owner can fix by answering a question.
+    """
+    fields = sorted({".".join(str(part) for part in err["loc"]) for err in exc.errors()})
+    return (
+        "Internal error: the knowledge-base data is missing/invalid fields: "
+        + ", ".join(fields)
+    )
+
+
+def _extract_json_blob(raw: str) -> str | None:
+    """Best-effort pull of the first {...} JSON object out of raw agent text.
+
+    Agent.kickoff() output is free text that may wrap the JSON payload in
+    prose; this is a heuristic, not a parser, until the document specialists
+    move to CrewAI's structured `response_format` for their tool outputs too.
+    """
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    return raw[start : end + 1]
 
 
 @persist()
@@ -108,10 +164,126 @@ class OrchestratorFlow(Flow[OrchestratorState]):
             sub_query = _rephrased_query_for(
                 self.state.routing_decision, "document", self.state.user_input
             )
-            output = placeholders.run_document(sub_query)
+            output = self._run_document_team(sub_query)
             self.state.active_agent_outputs["document"] = output
             self.state.invoked_specialists.append("document")
             logger.info("document crew invoked: %s", _truncate(output))
+
+    def _run_document_team(self, sub_query: str) -> str:
+        """The Document Team Lead: decide which specialist applies, then
+        dispatch directly to that specialist's standalone Agent. Kept as
+        plain Python inside the Flow (not a separate crew/module) since the
+        Flow already owns sequencing/branching for every other specialist.
+
+        Company profile / financial assumptions / grant narrative / headcount
+        plan are never gathered here — each _dispatch_* method below loads
+        its own reference data straight from knowledge/documents/*.json and
+        injects it directly into that specialist's prompt.
+        """
+        prompt = build_document_routing_prompt(sub_query, self.state.business_context)
+        try:
+            decision: DocumentRoutingDecision = document_team_lead_agent.kickoff(
+                prompt, response_format=DocumentRoutingDecision
+            ).pydantic
+        except Exception:
+            logger.exception("document routing failed")
+            return (
+                "Sorry, I had trouble understanding that document request — "
+                "could you rephrase it?"
+            )
+
+        # grant_scheme/requested_amount_sgd are per-request choices the LLM
+        # may only catch in the turn the owner mentions them; cache whatever
+        # it found so a later turn in the grant flow can still fall back to
+        # it (mirrors financial_forecast caching in _dispatch_financial).
+        if decision.grant_scheme:
+            self.state.business_context["grant_scheme"] = decision.grant_scheme
+        if decision.requested_amount_sgd:
+            self.state.business_context["requested_amount_sgd"] = decision.requested_amount_sgd
+
+        if decision.route_type == "clarify" or decision.specialist is None:
+            return decision.clarifying_question or "Could you clarify what document help you need?"
+        if decision.specialist == "statutory":
+            return self._dispatch_statutory(decision)
+        if decision.specialist == "financial":
+            return self._dispatch_financial()
+        return self._dispatch_grant(decision)
+
+    def _dispatch_statutory(self, decision: DocumentRoutingDecision) -> str:
+        try:
+            profile = CompanyProfile.model_validate(load_company_profile())
+        except ValidationError as exc:
+            return _describe_validation_errors(exc)
+
+        profile_json = profile.model_dump_json()
+        issues = validate_company_profile.run(profile_json)
+        if issues != "OK":
+            return issues
+
+        document_types = decision.document_types or ["model_constitution"]
+        prompt = build_statutory_render_prompt(document_types, profile_json)
+        return statutory_compliance_agent.kickoff(prompt).raw
+
+    def _dispatch_financial(self) -> str:
+        assumptions = load_financial_assumptions()
+        prompt = build_financial_prompt(json.dumps(assumptions))
+        raw = financial_synthesizer_agent.kickoff(prompt).raw
+
+        blob = _extract_json_blob(raw)
+        if blob:
+            try:
+                forecast = FinancialForecast.model_validate_json(blob)
+                self.state.business_context["financial_forecast"] = json.loads(
+                    forecast.model_dump_json()
+                )
+            except (ValidationError, ValueError):
+                logger.warning("could not parse a FinancialForecast out of agent output")
+        return raw
+
+    def _dispatch_grant(self, decision: DocumentRoutingDecision) -> str:
+        context = self.state.business_context
+
+        # financial_forecast isn't knowledge-base data itself (it's the
+        # Financial Synthesizer's own output) — it's cached in state to avoid
+        # re-running that agent when a grant request follows a financial one
+        # in the same session.
+        if not context.get("financial_forecast"):
+            self._dispatch_financial()
+
+        scheme = decision.grant_scheme or context.get("grant_scheme")
+        if not scheme:
+            return (
+                "Which grant scheme is this for — Startup SG Founder or the "
+                "Enterprise Development Grant (EDG)?"
+            )
+
+        try:
+            profile = CompanyProfile.model_validate(load_company_profile())
+        except ValidationError as exc:
+            return _describe_validation_errors(exc)
+        try:
+            headcount = HeadcountPlan.model_validate(load_headcount_plan())
+        except ValidationError as exc:
+            return _describe_validation_errors(exc)
+
+        narrative_json = json.dumps(load_grant_narrative())
+        narrative_issues = validate_grant_narrative.run(scheme, narrative_json)
+        if narrative_issues != "OK":
+            return narrative_issues
+
+        requested_amount = decision.requested_amount_sgd or context.get("requested_amount_sgd")
+        if not requested_amount:
+            return "How much funding (in SGD) are you requesting?"
+
+        prompt = build_grant_prompt(
+            scheme,
+            profile.model_dump_json(),
+            json.dumps(context["financial_forecast"]),
+            headcount.model_dump_json(),
+            narrative_json,
+            requested_amount,
+        )
+        return grant_strategist_agent.kickoff(prompt).raw
 
     @listen(and_(route_hr, route_finance, route_document))
     def synthesize_step(self):
