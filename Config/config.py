@@ -16,7 +16,7 @@ ORCHESTRATOR_MODEL = os.getenv("ORCHESTRATOR_MODEL", "openai/gpt-4o-mini")
 # DOCUMENT_TEAM_API_KEY is optional — leave it unset to fall back to
 # whichever provider-specific env var CrewAI's LLM already resolves on its
 # own (e.g. ANTHROPIC_API_KEY for a claude-* model).
-DOCUMENT_TEAM_MODEL = os.getenv("DOCUMENT_TEAM_MODEL", "openai/gpt-4o-mini")
+DOCUMENT_TEAM_MODEL = os.getenv("DOCUMENT_TEAM_MODEL", "openai/gpt-5-mini")
 DOCUMENT_TEAM_API_KEY = os.getenv("DOCUMENT_TEAM_API_KEY")
 
 # Where rendered documents (ACRA filings, grant packages) are written.
@@ -30,5 +30,5 @@ DOCUMENT_OUTPUT_DIR = Path(
 # openai/gpt-4o-mini like every other agent in this repo — see
 # crews/hr/README.md's "Model config" section for why this isn't the
 # original prototype's Bedrock config.
-HR_TEAM_MODEL = os.getenv("HR_TEAM_MODEL", "openai/gpt-4o-mini")
+HR_TEAM_MODEL = os.getenv("HR_TEAM_MODEL", "openai/gpt-5-mini")
 HR_TEAM_API_KEY = os.getenv("HR_TEAM_API_KEY")

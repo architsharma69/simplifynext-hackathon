@@ -18,8 +18,7 @@ from crews.document.tools.grant_tools import validate_grant_narrative, compile_g
 # Config/config.py control model/provider and credentials for the whole
 # document team (this shared llm plus document_team_lead_agent below).
 llm = LLM(
-    model=config.DOCUMENT_TEAM_MODEL,
-    temperature=0.2
+    model=config.DOCUMENT_TEAM_MODEL
 )
 
 statutory_compliance_agent = Agent(
