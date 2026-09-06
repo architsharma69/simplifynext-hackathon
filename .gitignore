@@ -1,0 +1,28 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Generated runtime state, not source
+# crews/hr's ledger is seeded per-machine (`cd src && python -m crews.hr.seed`)
+# and seed.py builds it relative to today's date, so a committed copy goes
+# stale the moment the week rolls over.
+*.db
+*.db-journal
+src/crews/hr/outbox.jsonl
+
+# Rendered document output (Config.DOCUMENT_OUTPUT_DIR)
+output/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

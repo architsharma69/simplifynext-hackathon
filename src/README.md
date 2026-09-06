@@ -4,8 +4,21 @@
 
 See each subfolder's own README for what's inside it:
 - `flows/` — the core control flow that routes and answers user questions.
+- `crews/` — the specialist agents the flow routes to (orchestrator, document, hr).
 - `api/` — the FastAPI web server that exposes the flow over HTTP.
+- `knowledge/` — checked-in reference data the document specialists read from.
 - `tests/` — automated tests for everything above.
+
+## First-time setup
+
+The HR crew keeps a local SQLite ledger that is gitignored, so seed it once
+before running the API (the tests don't need it, a live run does):
+
+```bash
+cd src && python -m crews.hr.seed
+```
+
+See `crews/hr/README.md` for why it isn't committed.
 
 ## Running the tests
 

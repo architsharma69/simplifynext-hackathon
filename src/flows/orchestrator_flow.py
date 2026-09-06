@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+from datetime import date
 from pathlib import Path
 
 # Makes `Config` (and, via it, `src`) importable so this file works both as
@@ -42,6 +43,9 @@ from crews.document.tools.financial_tools import (
 )
 from crews.document.tools.grant_tools import validate_grant_narrative
 from crews.document.tools.statutory_tools import validate_company_profile
+from crews.hr.agents import hr_manager_agent
+from crews.hr.schemas import WorkloadResponse
+from crews.hr.tasks import build_hr_prompt
 from crews.orchestrator import agent as orchestrator_agent
 from flows import placeholders
 from flows.state import OrchestratorState
@@ -131,10 +135,43 @@ class OrchestratorFlow(Flow[OrchestratorState]):
             sub_query = _rephrased_query_for(
                 self.state.routing_decision, "hr", self.state.user_input
             )
-            output = placeholders.run_hr(sub_query)
+            output = self._run_hr_team(sub_query)
             self.state.active_agent_outputs["hr"] = output
             self.state.invoked_specialists.append("hr")
             logger.info("hr crew invoked: %s", _truncate(output))
+
+    def _run_hr_team(self, sub_query: str) -> str:
+        """hr_manager_agent handles the rephrased request end to end using
+        its ledger tools (see crews/hr/README.md) — there's no team-lead
+        routing step here the way there is for crews/document, since HR is
+        one agent, not several specialists to choose between.
+
+        Returns WorkloadResponse.message (what the founder actually reads)
+        rather than the full structured object, matching the plain-string
+        contract every other _run_*_team-style dispatch hands back to
+        synthesize_step via active_agent_outputs.
+        """
+        prompt = build_hr_prompt(sub_query, date.today().isoformat())
+        try:
+            result = hr_manager_agent.kickoff(prompt, response_format=WorkloadResponse)
+        except Exception:
+            logger.exception("hr crew failed")
+            return (
+                "Sorry, I had trouble handling that workload request — "
+                "could you rephrase it?"
+            )
+
+        response: WorkloadResponse | None = getattr(result, "pydantic", None)
+        if response is None:
+            logger.warning("hr crew did not return structured output; using raw text")
+            return result.raw
+
+        if response.needs_reply:
+            # Mirrors crews/document's escalation gate: built, but not fully
+            # wired into OrchestratorState yet — see crews/hr/README.md's
+            # "Known limitations".
+            self.state.pending_actions.append(f"hr: {response.message}")
+        return response.message
 
     @listen("proceed")
     def route_finance(self):

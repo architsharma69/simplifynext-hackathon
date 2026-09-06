@@ -16,14 +16,10 @@ Defines `OrchestratorState`, the shared data object every step of the flow reads
 - `final_response` — The single combined answer sent back to the user.
 
 ## `placeholders.py`
-Stand-in logic for the real agents, until they exist.
+Stand-in logic for the specialists that don't exist yet. HR, Document and the Orchestrator itself are real now and are called directly, so only two placeholders are left.
 
-- `classify_intent(user_input)` — Looks for HR/Finance/Document keywords in the question and decides which specialist(s) should handle it. Says "needs clarification" if nothing matches.
-- `run_hr(sub_query)` — Fake HR specialist. Just echoes the question back with an `[HR placeholder]` label instead of really answering it.
-- `run_finance(sub_query)` — Fake Finance specialist. Same idea as `run_hr`, labeled for Finance.
-- `run_document(sub_query)` — Fake Document specialist. Same idea as `run_hr`, labeled for Document.
+- `run_finance(sub_query)` — Fake Finance specialist. Echoes the question back with a `[Finance placeholder]` label instead of really answering it.
 - `run_consultant()` — Fake Consultant specialist. Always returns a canned "no improvements yet" message.
-- `synthesize(outputs)` — Joins whatever the specialists returned into one combined response, or says there's nothing to combine if none ran.
 
 ## `orchestrator_flow.py`
 The control flow itself, built with CrewAI's `Flow`.
@@ -33,8 +29,8 @@ The control flow itself, built with CrewAI's `Flow`.
 - `OrchestratorFlow.classify_intent_step()` — Calls the placeholder routing logic and saves the result (which specialists, or a clarifying question) into the flow's state.
 - `OrchestratorFlow.check_confidence()` — Reads the routing decision and sends the flow down the "ask for clarification" path or the "call specialists" path.
 - `OrchestratorFlow.ask_clarification()` — Sets the final response to the clarifying question, used when routing couldn't tell what was being asked.
-- `OrchestratorFlow.route_hr()` — Runs the HR placeholder and saves its answer, but only if HR was chosen for this question; otherwise does nothing.
-- `OrchestratorFlow.route_finance()` — Same as `route_hr`, but for the Finance specialist.
+- `OrchestratorFlow.route_hr()` — Runs the real HR workload-manager crew (`crews/hr/`) via `_run_hr_team()` and saves its answer, but only if HR was chosen for this question; otherwise does nothing.
+- `OrchestratorFlow.route_finance()` — Same shape as `route_hr`, but still calls the Finance placeholder.
 - `OrchestratorFlow.route_document()` — Same as `route_hr`, but for the Document specialist.
 - `OrchestratorFlow.synthesize_step()` — Once all three specialist branches have run (even the ones that did nothing), combines their outputs into the final response.
 - `OrchestratorFlow.run_consultant_review()` — A separate, manually-triggered check-in from the Consultant specialist. Not run automatically on every question.

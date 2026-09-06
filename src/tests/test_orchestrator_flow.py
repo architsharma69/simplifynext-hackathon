@@ -1,4 +1,5 @@
 from crews.document.schemas import DocumentRoutingDecision
+from crews.hr.schemas import WorkloadResponse
 from crews.orchestrator.schemas import RephrasedQuery, RoutingDecision
 from flows.orchestrator_flow import OrchestratorFlow
 
@@ -71,13 +72,21 @@ def test_pure_hr_query(monkeypatch):
     )
     _patch_synthesize(monkeypatch, "combined hr answer")
 
+    hr_response = WorkloadResponse(
+        kind="status",
+        message="There are 8 people on the roster right now.",
+        needs_reply=False,
+    )
+    monkeypatch.setattr(
+        "flows.orchestrator_flow.hr_manager_agent",
+        _FakeAgent(_FakeKickoffResult(pydantic=hr_response)),
+    )
+
     flow = OrchestratorFlow()
     flow.kickoff(inputs={"user_input": "How many employees are on the roster?"})
 
     assert flow.state.invoked_specialists == ["hr"]
-    assert flow.state.active_agent_outputs["hr"] == (
-        "[HR placeholder] would respond to: How many employees are currently on staff?"
-    )
+    assert flow.state.active_agent_outputs["hr"] == "There are 8 people on the roster right now."
     assert flow.state.final_response == "combined hr answer"
 
 
@@ -112,6 +121,14 @@ def test_mixed_hr_and_finance_query(monkeypatch):
         ),
     )
     _patch_synthesize(monkeypatch, "combined hr+finance answer")
+
+    hr_response = WorkloadResponse(
+        kind="declined", message="I don't have a way to edit the roster itself.", needs_reply=False
+    )
+    monkeypatch.setattr(
+        "flows.orchestrator_flow.hr_manager_agent",
+        _FakeAgent(_FakeKickoffResult(pydantic=hr_response)),
+    )
 
     flow = OrchestratorFlow()
     flow.kickoff(inputs={"user_input": "Update the roster and check the budget"})
