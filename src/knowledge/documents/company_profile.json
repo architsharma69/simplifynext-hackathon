@@ -1,0 +1,27 @@
+{
+  "proposed_company_name": "Acme Robotics Pte Ltd",
+  "registered_address": "1 Raffles Place, #20-01, Singapore 048616",
+  "principal_activity_ssic_code": "62011",
+  "directors": [
+    {
+      "full_name": "Alice Tan",
+      "nric_or_passport": "S1234567A",
+      "nationality": "Singaporean",
+      "residential_address": "10 Orchard Rd, Singapore",
+      "is_resident_director": true
+    },
+    {
+      "full_name": "Bob Lee",
+      "nric_or_passport": "S7654321B",
+      "nationality": "Singaporean",
+      "residential_address": "5 Marina Blvd, Singapore",
+      "is_resident_director": true
+    }
+  ],
+  "shareholders": [
+    {"full_name": "Alice Tan", "id_number": "S1234567A", "shares_held": 6000},
+    {"full_name": "Bob Lee", "id_number": "S7654321B", "shares_held": 4000}
+  ],
+  "company_secretary_name": "Carol Wong",
+  "paid_up_capital_sgd": 100000.0
+}
