@@ -16,33 +16,29 @@ def build_document_routing_prompt(sub_query: str, business_context: dict) -> str
     return (
         "A business owner's question, already rephrased for the document team, is:\n"
         f'"{sub_query}"\n\n'
-        f"Everything known so far about this business (JSON): {json.dumps(business_context)}\n\n"
+        f"Anything already known from earlier in the conversation (JSON): {json.dumps(business_context)}\n\n"
         "Decide which ONE document specialist should handle this:\n"
         '- "statutory": Singapore ACRA BizFile+ incorporation paperwork (Model '
-        "Constitution, Form 45, Form 45B, First Board Resolution, RORC register).\n"
+        "Constitution, Form 45, Form 45B, First Board Resolution, RORC register). "
+        "If this is the one, list which document type(s) were asked for in "
+        "document_types.\n"
         '- "financial": a 3-year cash flow / P&L forecast, burn rate, and '
-        "break-even estimate built from a small set of business assumptions.\n"
-        '- "grant": a Startup SG Founder or EDG grant package, which needs a '
-        "financial forecast and headcount plan to already exist.\n\n"
-        'If the query and business context together give you enough to proceed, set '
-        'route_type to "dispatch" and pick a specialist. In extracted_fields_json, '
-        "re-emit the COMPLETE up-to-date value (not just what's new this turn) of "
-        "any of these keys you're confident about, merging what's already known "
-        "with anything new in this message: company_profile (matching the "
-        "CompanyProfile schema: proposed_company_name, registered_address, "
-        "principal_activity_ssic_code, directors, shareholders, "
-        "company_secretary_name, paid_up_capital_sgd), financial_assumptions "
-        "(starting_monthly_revenue_sgd, monthly_revenue_growth_pct, "
-        "cogs_pct_of_revenue, fixed_monthly_opex_sgd, starting_cash_sgd), "
-        "headcount_plan (a dict with a 'lines' list of role_title, department, "
-        "count, monthly_salary_sgd, start_month_index), narrative_sections (a "
-        "dict of section name -> text for the grant scheme), "
-        "requested_amount_sgd, and grant_scheme (\"startup_sg_founder\" or "
-        '"enterprise_development_grant"). Leave extracted_fields_json as "{}" '
-        "if nothing new or confirmed is available.\n\n"
-        "If you genuinely cannot tell which specialist applies even with this "
-        'context, set route_type to "clarify" and ask exactly one specific '
-        "question in clarifying_question."
+        "break-even estimate.\n"
+        '- "grant": a Startup SG Founder or EDG grant package. If this is the '
+        "one, set grant_scheme "
+        '("startup_sg_founder" or "enterprise_development_grant") and '
+        "requested_amount_sgd from whatever the owner has said (leave either "
+        "null if not yet known — that's fine, don't guess).\n\n"
+        "The company profile, financial assumptions, grant narrative, and "
+        "headcount plan themselves are NOT something you need to gather or "
+        "extract — each specialist already has its own reference data for "
+        "this business and loads it directly. Your job is only to pick the "
+        "specialist and, for statutory/grant, the request-specific choices "
+        "above.\n\n"
+        'If you can tell which specialist applies, set route_type to "dispatch". '
+        "If you genuinely cannot tell even from the rephrased question, set "
+        'route_type to "clarify" and ask exactly one specific question in '
+        "clarifying_question."
     )
 
 

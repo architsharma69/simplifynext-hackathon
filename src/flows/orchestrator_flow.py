@@ -42,6 +42,12 @@ from crews.document.tools.statutory_tools import validate_company_profile
 from crews.orchestrator import agent as orchestrator_agent
 from flows import placeholders
 from flows.state import OrchestratorState
+from knowledge.documents import (
+    load_company_profile,
+    load_financial_assumptions,
+    load_grant_narrative,
+    load_headcount_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,18 +63,18 @@ def _rephrased_query_for(routing_decision: dict, specialist: str, fallback: str)
     return fallback
 
 
-_REQUIRED_FINANCIAL_ASSUMPTION_KEYS = [
-    "starting_monthly_revenue_sgd",
-    "monthly_revenue_growth_pct",
-    "cogs_pct_of_revenue",
-    "fixed_monthly_opex_sgd",
-    "starting_cash_sgd",
-]
-
-
 def _describe_validation_errors(exc: ValidationError) -> str:
+    """Formats a Pydantic ValidationError against knowledge/documents/*.json.
+
+    These files are checked-in fixtures, not conversational input, so a
+    failure here means the fixture itself doesn't match its schema — a repo
+    bug, not something the business owner can fix by answering a question.
+    """
     fields = sorted({".".join(str(part) for part in err["loc"]) for err in exc.errors()})
-    return "I still need: " + ", ".join(fields) + "."
+    return (
+        "Internal error: the knowledge-base data is missing/invalid fields: "
+        + ", ".join(fields)
+    )
 
 
 def _extract_json_blob(raw: str) -> str | None:
@@ -164,11 +170,15 @@ class OrchestratorFlow(Flow[OrchestratorState]):
             logger.info("document crew invoked: %s", _truncate(output))
 
     def _run_document_team(self, sub_query: str) -> str:
-        """The Document Team Lead: decide which specialist applies, merge any
-        newly-extracted facts into business_context, then validate and
+        """The Document Team Lead: decide which specialist applies, then
         dispatch directly to that specialist's standalone Agent. Kept as
         plain Python inside the Flow (not a separate crew/module) since the
         Flow already owns sequencing/branching for every other specialist.
+
+        Company profile / financial assumptions / grant narrative / headcount
+        plan are never gathered here — each _dispatch_* method below loads
+        its own reference data straight from knowledge/documents/*.json and
+        injects it directly into that specialist's prompt.
         """
         prompt = build_document_routing_prompt(sub_query, self.state.business_context)
         try:
@@ -182,12 +192,14 @@ class OrchestratorFlow(Flow[OrchestratorState]):
                 "could you rephrase it?"
             )
 
-        try:
-            extracted = json.loads(decision.extracted_fields_json or "{}")
-        except json.JSONDecodeError:
-            extracted = {}
-        if isinstance(extracted, dict):
-            self.state.business_context.update(extracted)
+        # grant_scheme/requested_amount_sgd are per-request choices the LLM
+        # may only catch in the turn the owner mentions them; cache whatever
+        # it found so a later turn in the grant flow can still fall back to
+        # it (mirrors financial_forecast caching in _dispatch_financial).
+        if decision.grant_scheme:
+            self.state.business_context["grant_scheme"] = decision.grant_scheme
+        if decision.requested_amount_sgd:
+            self.state.business_context["requested_amount_sgd"] = decision.requested_amount_sgd
 
         if decision.route_type == "clarify" or decision.specialist is None:
             return decision.clarifying_question or "Could you clarify what document help you need?"
@@ -199,9 +211,7 @@ class OrchestratorFlow(Flow[OrchestratorState]):
 
     def _dispatch_statutory(self, decision: DocumentRoutingDecision) -> str:
         try:
-            profile = CompanyProfile.model_validate(
-                self.state.business_context.get("company_profile", {})
-            )
+            profile = CompanyProfile.model_validate(load_company_profile())
         except ValidationError as exc:
             return _describe_validation_errors(exc)
 
@@ -215,11 +225,7 @@ class OrchestratorFlow(Flow[OrchestratorState]):
         return statutory_compliance_agent.kickoff(prompt).raw
 
     def _dispatch_financial(self) -> str:
-        assumptions = self.state.business_context.get("financial_assumptions", {})
-        missing = [k for k in _REQUIRED_FINANCIAL_ASSUMPTION_KEYS if k not in assumptions]
-        if missing:
-            return "I still need: " + ", ".join(missing) + "."
-
+        assumptions = load_financial_assumptions()
         prompt = build_financial_prompt(json.dumps(assumptions))
         raw = financial_synthesizer_agent.kickoff(prompt).raw
 
@@ -237,15 +243,12 @@ class OrchestratorFlow(Flow[OrchestratorState]):
     def _dispatch_grant(self, decision: DocumentRoutingDecision) -> str:
         context = self.state.business_context
 
+        # financial_forecast isn't knowledge-base data itself (it's the
+        # Financial Synthesizer's own output) — it's cached in state to avoid
+        # re-running that agent when a grant request follows a financial one
+        # in the same session.
         if not context.get("financial_forecast"):
-            if context.get("financial_assumptions"):
-                self._dispatch_financial()
-            if not context.get("financial_forecast"):
-                return (
-                    "I still need your financial assumptions (starting monthly "
-                    "revenue, growth rate, COGS %, fixed opex, starting cash) "
-                    "before I can compile a grant package."
-                )
+            self._dispatch_financial()
 
         scheme = decision.grant_scheme or context.get("grant_scheme")
         if not scheme:
@@ -255,16 +258,15 @@ class OrchestratorFlow(Flow[OrchestratorState]):
             )
 
         try:
-            profile = CompanyProfile.model_validate(context.get("company_profile", {}))
+            profile = CompanyProfile.model_validate(load_company_profile())
         except ValidationError as exc:
             return _describe_validation_errors(exc)
         try:
-            headcount = HeadcountPlan.model_validate(context.get("headcount_plan", {}))
+            headcount = HeadcountPlan.model_validate(load_headcount_plan())
         except ValidationError as exc:
             return _describe_validation_errors(exc)
 
-        narrative_sections = context.get("narrative_sections", {})
-        narrative_json = json.dumps(narrative_sections)
+        narrative_json = json.dumps(load_grant_narrative())
         narrative_issues = validate_grant_narrative.run(scheme, narrative_json)
         if narrative_issues != "OK":
             return narrative_issues

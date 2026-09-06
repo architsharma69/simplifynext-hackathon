@@ -1,5 +1,3 @@
-import json
-
 from crews.document.schemas import DocumentRoutingDecision
 from crews.orchestrator.schemas import RephrasedQuery, RoutingDecision
 from flows.orchestrator_flow import OrchestratorFlow
@@ -139,17 +137,6 @@ def test_pure_document_query(monkeypatch):
         document_types=[],
         grant_scheme=None,
         requested_amount_sgd=None,
-        extracted_fields_json=json.dumps(
-            {
-                "financial_assumptions": {
-                    "starting_monthly_revenue_sgd": 5000,
-                    "monthly_revenue_growth_pct": 0.05,
-                    "cogs_pct_of_revenue": 0.3,
-                    "fixed_monthly_opex_sgd": 2000,
-                    "starting_cash_sgd": 20000,
-                }
-            }
-        ),
         clarifying_question=None,
     )
     monkeypatch.setattr(

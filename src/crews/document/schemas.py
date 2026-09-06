@@ -185,9 +185,11 @@ class DocumentRoutingDecision(BaseModel):
 
     No default values, mirroring crews/orchestrator/schemas.py's
     RoutingDecision: every field must be filled in (using []/null for
-    whichever don't apply), and open-ended data is passed as a JSON string
-    rather than a freeform dict, matching every other Flow<->agent boundary
-    in this crew (e.g. render_acra_document's company_profile_json).
+    whichever don't apply). Company profile / financial assumptions / grant
+    narrative / headcount plan are NOT extracted here — they're sample data
+    loaded straight from knowledge/documents/*.json by whichever
+    OrchestratorFlow._dispatch_* method gets picked, so this decision only
+    needs to carry the per-request choices that data can't answer.
     """
 
     route_type: Literal["dispatch", "clarify"]
@@ -195,5 +197,4 @@ class DocumentRoutingDecision(BaseModel):
     document_types: list[str]
     grant_scheme: str | None
     requested_amount_sgd: float | None
-    extracted_fields_json: str
     clarifying_question: str | None

@@ -37,25 +37,36 @@ top-level routing:
 2. `_run_document_team` builds a routing prompt (`tasks.build_document_routing_prompt`)
    from the rephrased query plus `OrchestratorState.business_context`, and asks
    `document_team_lead_agent` for a structured `DocumentRoutingDecision`: which ONE
-   specialist applies, plus any structured fields it could extract from the
-   conversation (company profile, financial assumptions, headcount plan, narrative
-   sections, requested amount, grant scheme).
-3. Extracted fields are merged into `business_context` (which is already carried
-   cross-turn by `api/entrypoint.py` — no extra state plumbing needed). The LLM is
-   asked to re-emit each key's *complete* current value each turn (not just a
-   delta), so the merge on the Python side is a plain shallow dict update. Known
-   limitation: this leans on the LLM re-stating full nested objects each turn,
-   bounded by context window — fine at hackathon scale, not solved here.
-4. `OrchestratorFlow._dispatch_statutory` / `_dispatch_financial` / `_dispatch_grant`
-   validate the relevant fields with the real Pydantic models (`CompanyProfile`,
-   `HeadcountPlan`) and the deterministic validation tools
-   (`validate_company_profile`, `validate_grant_narrative`) *before* ever spending an
-   LLM call. If something required is missing, the method returns a clarifying
-   message directly — no specialist agent is invoked. Otherwise it calls the
-   relevant specialist agent directly: `statutory_compliance_agent.kickoff(...)`,
-   `financial_synthesizer_agent.kickoff(...)`, or `grant_strategist_agent.kickoff(...)`.
-   A grant request that's missing a financial forecast but has assumptions on hand
-   auto-chains the financial dispatch first.
+   specialist applies, plus the request-specific choices that data can't answer
+   (which ACRA document types, which grant scheme, requested amount).
+3. `OrchestratorFlow._dispatch_statutory` / `_dispatch_financial` / `_dispatch_grant`
+   load that specialist's reference data straight from `knowledge/documents/*.json`
+   (see "Knowledge base" below), validate it with the real Pydantic models
+   (`CompanyProfile`, `HeadcountPlan`) and the deterministic validation tools
+   (`validate_company_profile`, `validate_grant_narrative`), then inject it
+   directly into that specialist's prompt and call it:
+   `statutory_compliance_agent.kickoff(...)`, `financial_synthesizer_agent.kickoff(...)`,
+   or `grant_strategist_agent.kickoff(...)`. A grant request auto-chains the
+   financial dispatch first if no forecast is cached yet this session.
+
+## Knowledge base
+
+`src/knowledge/documents/*.json` holds the sample company/business data every
+document specialist needs — `company_profile.json`, `financial_assumptions.json`,
+`grant_narrative.json`, `headcount_plan.json` — checked into the repo for the
+hackathon instead of being gathered live via conversation. `knowledge/documents/__init__.py`
+exposes one loader per file (`load_company_profile()`, etc.); each `_dispatch_*`
+method calls the loader(s) it needs directly and interpolates the result straight
+into that specialist's prompt string (`tasks.py`'s `build_statutory_render_prompt`
+etc. already take the data as a plain string parameter) — no tool call, no flow
+state, no LLM extraction step for this data. `DocumentRoutingDecision` only carries
+what the knowledge base *can't* answer: which specialist, which ACRA document
+types, which grant scheme, how much funding.
+
+A `ValidationError` against one of these files means the fixture itself doesn't
+match its schema — a repo bug, not something the business owner can fix by
+answering a question — so `_describe_validation_errors` phrases that case as an
+internal error rather than a clarifying question.
 
 ## Why no Crews
 
@@ -85,9 +96,9 @@ follow-up, not something quietly missing.
 
 ## Known limitations carried over from the placeholder system
 
-- No real HR crew exists yet (`flows/placeholders.run_hr` is still a stub), so
-  `headcount_plan` for grant requests has no real producer and must come from the
-  same LLM-extraction path as everything else.
+- `headcount_plan` for grant requests comes from `knowledge/documents/headcount_plan.json`
+  rather than a real HR crew (`flows/placeholders.run_hr` is still a stub) — swap the
+  loader call in `_dispatch_grant` for a real HR crew's output once one exists.
 - Financial/grant agent output is parsed back into typed objects with a best-effort
   "find the `{...}` blob in the raw text" heuristic
   (`flows/orchestrator_flow._extract_json_blob`), not CrewAI's structured
