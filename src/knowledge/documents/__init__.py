@@ -27,8 +27,9 @@ def load_financial_assumptions() -> dict:
     return _load("financial_assumptions.json")
 
 
-def load_grant_narrative() -> dict:
-    return _load("grant_narrative.json")
+def load_grant_narrative(scheme: str) -> dict:
+    narratives = _load("grant_narrative.json")
+    return narratives[scheme]
 
 
 def load_headcount_plan() -> dict:

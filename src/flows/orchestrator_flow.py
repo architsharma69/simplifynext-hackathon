@@ -28,7 +28,6 @@ from crews.document.agents import (
 from crews.document.schemas import (
     CompanyProfile,
     DocumentRoutingDecision,
-    FinancialForecast,
     HeadcountPlan,
 )
 from crews.document.tasks import (
@@ -36,6 +35,10 @@ from crews.document.tasks import (
     build_financial_prompt,
     build_grant_prompt,
     build_statutory_render_prompt,
+)
+from crews.document.tools.financial_tools import (
+    generate_financial_forecast,
+    summarize_burn_and_breakeven,
 )
 from crews.document.tools.grant_tools import validate_grant_narrative
 from crews.document.tools.statutory_tools import validate_company_profile
@@ -75,20 +78,6 @@ def _describe_validation_errors(exc: ValidationError) -> str:
         "Internal error: the knowledge-base data is missing/invalid fields: "
         + ", ".join(fields)
     )
-
-
-def _extract_json_blob(raw: str) -> str | None:
-    """Best-effort pull of the first {...} JSON object out of raw agent text.
-
-    Agent.kickoff() output is free text that may wrap the JSON payload in
-    prose; this is a heuristic, not a parser, until the document specialists
-    move to CrewAI's structured `response_format` for their tool outputs too.
-    """
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return None
-    return raw[start : end + 1]
 
 
 @persist()
@@ -225,27 +214,35 @@ class OrchestratorFlow(Flow[OrchestratorState]):
         return statutory_compliance_agent.kickoff(prompt).raw
 
     def _dispatch_financial(self) -> str:
-        assumptions = load_financial_assumptions()
-        prompt = build_financial_prompt(json.dumps(assumptions))
-        raw = financial_synthesizer_agent.kickoff(prompt).raw
+        """The 3-year forecast is deterministic Python math (generate_financial_forecast
+        just does arithmetic), so it's computed directly here rather than asked of the
+        LLM — an LLM asked to transcribe 36 months of numbers back out as its own
+        answer (or as a tool-call argument to summarize_burn_and_breakeven) reliably
+        garbles the JSON once enough conversation history accumulates. The agent's
+        only job is the judgment call (flagging implausible assumptions) and prose;
+        it never sees or re-emits the raw numbers.
 
-        blob = _extract_json_blob(raw)
-        if blob:
-            try:
-                forecast = FinancialForecast.model_validate_json(blob)
-                self.state.business_context["financial_forecast"] = json.loads(
-                    forecast.model_dump_json()
-                )
-            except (ValidationError, ValueError):
-                logger.warning("could not parse a FinancialForecast out of agent output")
-        return raw
+        The caller still needs the full forecast, not just the agent's commentary
+        (e.g. a user who asked for a forecast wants all 36 months, not a summary
+        paragraph) — so it's appended here in Python, verbatim from the tool's own
+        output, rather than trusting the agent to reproduce it.
+        """
+        assumptions = load_financial_assumptions()
+        forecast_json = generate_financial_forecast.run(**assumptions)
+        self.state.business_context["financial_forecast"] = json.loads(forecast_json)
+
+        summary = summarize_burn_and_breakeven.run(forecast_json)
+        prompt = build_financial_prompt(json.dumps(assumptions), summary)
+        commentary = financial_synthesizer_agent.kickoff(prompt).raw
+
+        return f"{commentary}\n\nFull 3-year forecast (FinancialForecast JSON):\n{forecast_json}"
 
     def _dispatch_grant(self, decision: DocumentRoutingDecision) -> str:
         context = self.state.business_context
 
-        # financial_forecast isn't knowledge-base data itself (it's the
-        # Financial Synthesizer's own output) — it's cached in state to avoid
-        # re-running that agent when a grant request follows a financial one
+        # financial_forecast isn't knowledge-base data itself (it's computed by
+        # _dispatch_financial, not loaded from a fixture) — it's cached in state
+        # to avoid recomputing it when a grant request follows a financial one
         # in the same session.
         if not context.get("financial_forecast"):
             self._dispatch_financial()
@@ -266,7 +263,13 @@ class OrchestratorFlow(Flow[OrchestratorState]):
         except ValidationError as exc:
             return _describe_validation_errors(exc)
 
-        narrative_json = json.dumps(load_grant_narrative())
+        try:
+            narrative_json = json.dumps(load_grant_narrative(scheme))
+        except KeyError:
+            return (
+                f"Internal error: no grant narrative on file for scheme '{scheme}'. "
+                "Valid schemes: startup_sg_founder, enterprise_development_grant."
+            )
         narrative_issues = validate_grant_narrative.run(scheme, narrative_json)
         if narrative_issues != "OK":
             return narrative_issues

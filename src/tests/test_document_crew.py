@@ -117,26 +117,29 @@ def test_dispatch_financial_uses_knowledge_base_assumptions(monkeypatch):
     flow = OrchestratorFlow()
     output = flow._dispatch_financial()
 
-    assert output == "Forecast generated."
+    # The agent's commentary and the full forecast both make it into the
+    # returned text — the forecast is appended in Python, not left to the
+    # agent to reproduce.
+    assert "Forecast generated." in output
     assert len(fake_financial.calls) == 1
     # The real financial_assumptions.json's data should have been injected.
     assert "8000" in fake_financial.calls[0]  # starting_monthly_revenue_sgd
+    # The forecast itself is computed directly, not parsed from the agent's
+    # reply, so it's populated even though fake_financial never mentions it.
+    forecast = flow.state.business_context["financial_forecast"]
+    assert len(forecast["months"]) == 36
+    assert '"month_index": 36' in output
 
 
 def test_dispatch_grant_auto_chains_financial_forecast(monkeypatch):
-    forecast_json = json.dumps(
-        {
-            "months": [],
-            "currency": "SGD",
-            "monthly_burn_rate_sgd": 0.0,
-            "runway_months": -1,
-            "break_even_month_index": None,
-            "assumptions": {},
-        }
-    )
+    """financial_forecast is computed deterministically (see
+    test_dispatch_financial_uses_knowledge_base_assumptions), not parsed out of
+    the Financial Synthesizer's raw text — so the fake agent here only needs to
+    stand in for the prose commentary, not carry a forecast payload.
+    """
     monkeypatch.setattr(
         "flows.orchestrator_flow.financial_synthesizer_agent",
-        _FakeAgent(_FakeKickoffResult(raw=f"Here is the forecast: {forecast_json}")),
+        _FakeAgent(_FakeKickoffResult(raw="Looks reasonable.")),
     )
 
     fake_grant = _FakeAgent(_FakeKickoffResult(raw="Grant package compiled."))
@@ -156,3 +159,32 @@ def test_dispatch_grant_auto_chains_financial_forecast(monkeypatch):
     assert output == "Grant package compiled."
     assert len(fake_grant.calls) == 1
     assert flow.state.business_context.get("financial_forecast") is not None
+    assert len(flow.state.business_context["financial_forecast"]["months"]) == 36
+
+
+def test_dispatch_grant_edg_scheme_reaches_grant_agent(monkeypatch):
+    """Regression test: grant_narrative.json is keyed by scheme, and the EDG
+    scheme requires different narrative sections than Startup SG Founder
+    (see _REQUIRED_SECTIONS in grant_tools.py). Previously the fixture only
+    covered Startup SG Founder, so every EDG request failed
+    validate_grant_narrative before grant_strategist_agent ever ran.
+    """
+    monkeypatch.setattr(
+        "flows.orchestrator_flow.financial_synthesizer_agent",
+        _FakeAgent(_FakeKickoffResult(raw="Looks reasonable.")),
+    )
+
+    fake_grant = _FakeAgent(_FakeKickoffResult(raw="EDG grant package compiled."))
+    monkeypatch.setattr("flows.orchestrator_flow.grant_strategist_agent", fake_grant)
+
+    flow = OrchestratorFlow()
+    output = flow._dispatch_grant(
+        _routing_decision(
+            specialist="grant",
+            grant_scheme="enterprise_development_grant",
+            requested_amount_sgd=200000,
+        )
+    )
+
+    assert output == "EDG grant package compiled."
+    assert len(fake_grant.calls) == 1

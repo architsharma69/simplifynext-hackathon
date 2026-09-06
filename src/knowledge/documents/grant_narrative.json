@@ -1,7 +1,16 @@
 {
-  "problem_statement": "Singapore SMEs lack affordable robotics automation for warehouse picking, forcing them to rely on manual labor that is increasingly hard to hire.",
-  "solution": "Acme Robotics builds a modular picking-arm system that integrates with existing warehouse racking with under a week of installation time.",
-  "market_opportunity": "The Southeast Asian warehouse automation market is projected to grow significantly as e-commerce fulfilment volumes rise and labor costs increase.",
-  "founder_background": "Alice Tan spent 6 years as a robotics lead at a logistics automation firm; Bob Lee previously ran commercial operations at a warehousing SaaS startup.",
-  "use_of_funds": "Funds will cover 2 additional engineering hires, tooling for a second prototype revision, and a 6-month pilot with two warehouse operators."
+  "startup_sg_founder": {
+    "problem_statement": "Singapore SMEs lack affordable robotics automation for warehouse picking, forcing them to rely on manual labor that is increasingly hard to hire.",
+    "solution": "Acme Robotics builds a modular picking-arm system that integrates with existing warehouse racking with under a week of installation time.",
+    "market_opportunity": "The Southeast Asian warehouse automation market is projected to grow significantly as e-commerce fulfilment volumes rise and labor costs increase.",
+    "founder_background": "Alice Tan spent 6 years as a robotics lead at a logistics automation firm; Bob Lee previously ran commercial operations at a warehousing SaaS startup.",
+    "use_of_funds": "Funds will cover 2 additional engineering hires, tooling for a second prototype revision, and a 6-month pilot with two warehouse operators."
+  },
+  "enterprise_development_grant": {
+    "project_scope": "Develop and productize the second-generation picking-arm controller software, adding multi-SKU recognition and a fleet-management dashboard so the system can be deployed across multiple warehouse sites simultaneously.",
+    "capability_area": "Innovation & Productivity — automating warehouse picking workflows that today rely on manual labor, to raise throughput and lower unit fulfilment cost.",
+    "expected_outcomes": "A 30% reduction in per-pick labor cost for pilot customers, support for at least 3 concurrent warehouse deployments, and a productized controller ready for commercial rollout within 12 months.",
+    "project_timeline": "Months 1-3: controller architecture and multi-SKU recognition R&D. Months 4-8: fleet-management dashboard build and integration testing. Months 9-12: multi-site pilot deployment and commercial hardening.",
+    "use_of_funds": "Funds will cover 2 additional engineering hires, tooling for a second prototype revision, and a 6-month pilot with two warehouse operators."
+  }
 }

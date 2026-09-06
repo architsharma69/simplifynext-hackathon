@@ -152,7 +152,12 @@ def test_pure_document_query(monkeypatch):
     flow.kickoff(inputs={"user_input": "Can you build our financial forecast?"})
 
     assert flow.state.invoked_specialists == ["document"]
-    assert flow.state.active_agent_outputs["document"] == "Forecast generated. Burn rate is low."
+    # The full forecast is appended in Python after the agent's commentary
+    # (see OrchestratorFlow._dispatch_financial), not left to the agent.
+    assert flow.state.active_agent_outputs["document"].startswith(
+        "Forecast generated. Burn rate is low."
+    )
+    assert "Full 3-year forecast" in flow.state.active_agent_outputs["document"]
     assert flow.state.final_response == "combined document answer"
 
 
