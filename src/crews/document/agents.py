@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from crewai import Agent, LLM
 
+from Config import config
 from crews.document.tools.statutory_tools import render_acra_document, validate_company_profile
 from crews.document.tools.financial_tools import (
     generate_financial_forecast,
@@ -17,8 +18,13 @@ from crews.document.tools.financial_tools import (
 )
 from crews.document.tools.grant_tools import validate_grant_narrative, compile_grant_package
 
-# Single LLM config reused across agents; swap model/provider here.
-llm = LLM(model="claude-sonnet-4-6", temperature=0.2)
+# Single LLM config reused across agents; DOCUMENT_TEAM_MODEL / _API_KEY in
+# Config/config.py control model/provider and credentials for the whole
+# document team (this shared llm plus document_team_lead_agent below).
+llm = LLM(
+    model=config.DOCUMENT_TEAM_MODEL,
+    temperature=0.2
+)
 
 statutory_compliance_agent = Agent(
     role="Statutory Compliance Specialist",
