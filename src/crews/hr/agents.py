@@ -37,8 +37,7 @@ from crews.hr.tools.notify_person import notify_person
 # the original prototype's bedrock/* config, since no Bedrock credentials
 # are wired up yet — see crews/hr/README.md.
 llm = LLM(
-    model=config.HR_TEAM_MODEL,
-    temperature=0.2,
+    model=config.HR_TEAM_MODEL
 )
 
 hr_manager_agent = Agent(
