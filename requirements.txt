@@ -10,3 +10,4 @@ python-dotenv
 pyyaml
 streamlit
 python-docx
+python-telegram-bot

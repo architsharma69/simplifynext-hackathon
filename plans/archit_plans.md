@@ -52,11 +52,11 @@
 
 ## 5. Create the Telegram Bot Wrapper
 
-- [ ] Set up a Telegram bot via BotFather, get the API token, store it in env config.
-- [ ] Use `python-telegram-bot` (or `aiogram`) to scaffold the bot with a basic message handler.
-- [ ] On each incoming Telegram message, call the FastAPI `/chat` endpoint with `platform="telegram"` and the Telegram user ID as `user_id` (so conversation state maps 1:1 to Telegram users, independent of any Streamlit sessions).
-- [ ] Return the Orchestrator's response back to the user as a Telegram message; handle CrewAI's longer response times with a "typing..." indicator (`send_chat_action`).
-- [ ] Handle non-text outputs (e.g. Document agent generating a file) by sending them as Telegram documents/attachments rather than raw text.
-- [ ] Add minimal error handling (API timeout, malformed response) with a friendly fallback message to the Telegram user.
-- [ ] Test end-to-end: Telegram message → FastAPI `/chat` → shared orchestrator function → Flow → specialist crews → response → back to Telegram.
+- [x] Set up a Telegram bot via BotFather, get the API token, store it in env config — `TELEGRAM_BOT_TOKEN` in `.env`, verified live against Telegram's `getMe` API (`@BizRezO_bot`).
+- [x] Use `python-telegram-bot` to scaffold the bot with a basic message handler — `ui/telegram/bot.py`, added to `requirements.txt`.
+- [x] On each incoming Telegram message, call the FastAPI `/chat` endpoint with `platform="telegram"` and the Telegram user ID as `user_id` — `ui/telegram/api_client.py` (async twin of the Streamlit client), `/newchat` command bumps a per-user session suffix to fake a fresh session.
+- [x] Return the Orchestrator's response back to the user as a Telegram message; handle CrewAI's longer response times with a "typing..." indicator (`send_chat_action`) — re-sent every 4s in a background task since Telegram's indicator auto-expires after ~5s.
+- [ ] Handle non-text outputs (e.g. Document agent generating a file) by sending them as Telegram documents/attachments rather than raw text — deferred: the API's `/chat` metadata doesn't populate `chart_data`/`document` yet (same placeholders Streamlit already has), nothing real to forward.
+- [x] Add minimal error handling (API timeout, malformed response) with a friendly fallback message to the Telegram user — mirrors Streamlit's `OrchestratorError` handling.
+- [ ] Test end-to-end: Telegram message → FastAPI `/chat` → shared orchestrator function → Flow → specialist crews → response → back to Telegram. (Unit-tested in `src/tests/test_telegram_bot.py`; live end-to-end message not yet run.)
 - [ ] Confirm both UIs work concurrently against the same running API (open Streamlit and message the bot in parallel) to validate session isolation.
